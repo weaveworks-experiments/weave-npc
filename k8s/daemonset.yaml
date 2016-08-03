@@ -1,0 +1,20 @@
+kind: DaemonSet
+apiVersion: extensions/v1beta1
+metadata:
+  name: weave-npc
+  namespace: kube-system
+  labels:
+    k8s-app: weave-npc
+spec:
+  template:
+    metadata:
+      name: weave-npc
+      namespace: kube-system
+      labels:
+        k8s-app: weave-npc
+    spec:
+      hostPID: true
+      hostNetwork: true
+      containers:
+      - name: weave-npc
+        image: harrisonadamw/weave-npc

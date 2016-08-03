@@ -1,0 +1,17 @@
+kind: NetworkPolicy
+apiVersion: extensions/v1beta1 
+metadata:
+  name: allow-frontend
+  namespace: default
+spec:
+  podSelector:            
+    matchLabels:
+      role: backend
+  ingress:                
+    - from:              
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - protocol: TCP
+          port: 6379
