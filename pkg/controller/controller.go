@@ -1,11 +1,8 @@
 package controller
 
 import (
-	"fmt"
-	"github.com/weaveworks/weave-npc/pkg/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
-	"k8s.io/kubernetes/pkg/types"
 	"sync"
 )
 
@@ -26,102 +23,106 @@ type NetworkPolicyController interface {
 type controller struct {
 	sync.Mutex
 
-	namespaces map[string]*api.Namespace                          // ns name -> ns (for matching NamespaceSelector)
-	pods       map[string]map[types.UID]*api.Pod                  // ns name -> pod UID -> pod (for matching PodSelector)
-	policies   map[string]map[types.UID]*extensions.NetworkPolicy // ns name -> policy UID -> policy
-
-	nsIPSets          map[string]ipset.HashIP             // ns name -> hash:ip ipset
-	podSelectorIPSets map[string]map[string]ipset.HashIP  // ns name -> selector string -> hash:ip ipset
-	nsSelectorIPSets  map[string]map[string]ipset.ListSet // ns name -> selector string -> list:set ipset
+	nss         map[string]*ns         // ns name -> ns struct
+	nsSelectors map[string]*nsSelector // selector string -> nsSelector
 }
 
 func New() NetworkPolicyController {
 	return &controller{}
 }
 
-func (npc *controller) AddPod(pod *api.Pod) error {
-	npc.Lock()
-	defer npc.Unlock()
-
-	haship, found := npc.nsIPSets[pod.ObjectMeta.Namespace]
+func (npc *controller) withNS(name string, f func(ns *ns) error) error {
+	ns, found := npc.nss[name]
 	if !found {
-		haship = ipset.NewHashIP(encodeBase95("ns", pod.ObjectMeta.Namespace))
-		npc.nsIPSets[pod.ObjectMeta.Namespace] = haship
+		ns = newNS(name)
+		npc.nss[name] = ns
 	}
-
-	if len(pod.Status.PodIP) > 0 {
-		return haship.AddIP(pod.Status.PodIP)
+	if err := f(ns); err != nil {
+		return err
 	}
-
+	if ns.empty() {
+		delete(npc.nss, name)
+	}
 	return nil
 }
 
-func (npc *controller) UpdatePod(old, new *api.Pod) error {
+func (npc *controller) AddPod(obj *api.Pod) error {
 	npc.Lock()
 	defer npc.Unlock()
 
-	if old.Status.PodIP != new.Status.PodIP {
-		haship, found := npc.nsIPSets[old.ObjectMeta.Namespace]
-		if !found {
-			return fmt.Errorf("Attempt to update pod %s in unknown namespace %s",
-				old.ObjectMeta.Name, old.ObjectMeta.Namespace)
-		}
-		if len(old.Status.PodIP) > 0 {
-			if err := haship.DelIP(old.Status.PodIP); err != nil {
-				return err
-			}
-		}
-		if len(new.Status.PodIP) > 0 {
-			if err := haship.AddIP(new.Status.PodIP); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.addPod(obj)
+	})
 }
 
-func (npc *controller) DeletePod(pod *api.Pod) error {
+func (npc *controller) UpdatePod(oldObj, newObj *api.Pod) error {
 	npc.Lock()
 	defer npc.Unlock()
 
-	if len(pod.Status.PodIP) > 0 {
-		haship, found := npc.nsIPSets[pod.ObjectMeta.Namespace]
-		if !found {
-			return fmt.Errorf("Attempt to delete pod %s in unknown namespace %s",
-				pod.ObjectMeta.Name, pod.ObjectMeta.Namespace)
-		}
-		if err := haship.DelIP(pod.Status.PodIP); err != nil {
-			return err
-		}
-		if haship.Count() == 0 {
-			delete(npc.nsIPSets, pod.ObjectMeta.Namespace)
-		}
-	}
-
-	return nil
+	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.updatePod(oldObj, newObj)
+	})
 }
 
-func (npc *controller) AddNetworkPolicy(np *extensions.NetworkPolicy) error {
-	return nil
+func (npc *controller) DeletePod(obj *api.Pod) error {
+	npc.Lock()
+	defer npc.Unlock()
+
+	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.deletePod(obj)
+	})
 }
 
-func (npc *controller) UpdateNetworkPolicy(old, new *extensions.NetworkPolicy) error {
-	return nil
+func (npc *controller) AddNetworkPolicy(obj *extensions.NetworkPolicy) error {
+	npc.Lock()
+	defer npc.Unlock()
+
+	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.addNetworkPolicy(obj)
+	})
 }
 
-func (npc *controller) DeleteNetworkPolicy(np *extensions.NetworkPolicy) error {
-	return nil
+func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error {
+	npc.Lock()
+	defer npc.Unlock()
+
+	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.updateNetworkPolicy(oldObj, newObj)
+	})
 }
 
-func (npc *controller) AddNamespace(np *api.Namespace) error {
-	return nil
+func (npc *controller) DeleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
+	npc.Lock()
+	defer npc.Unlock()
+
+	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.deleteNetworkPolicy(obj)
+	})
 }
 
-func (npc *controller) UpdateNamespace(old, new *api.Namespace) error {
-	return nil
+func (npc *controller) AddNamespace(obj *api.Namespace) error {
+	npc.Lock()
+	defer npc.Unlock()
+
+	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.addNamespace(obj)
+	})
 }
 
-func (npc *controller) DeleteNamespace(np *api.Namespace) error {
-	return nil
+func (npc *controller) UpdateNamespace(oldObj, newObj *api.Namespace) error {
+	npc.Lock()
+	defer npc.Unlock()
+
+	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.updateNamespace(oldObj, newObj)
+	})
+}
+
+func (npc *controller) DeleteNamespace(obj *api.Namespace) error {
+	npc.Lock()
+	defer npc.Unlock()
+
+	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
+		return ns.deleteNamespace(obj)
+	})
 }
