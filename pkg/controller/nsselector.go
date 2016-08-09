@@ -19,8 +19,8 @@ func newNSSelector(labelSelector labels.Selector) *nsSelector {
 		ipset:    ipset.NewListSet("meh")}
 }
 
-func (nss *nsSelector) matches(labels map[string]string) bool {
-	return false
+func (nss *nsSelector) matches(labelMap map[string]string) bool {
+	return nss.selector.Matches(labels.Set(labelMap))
 }
 
 func (ns *nsSelector) addList(name string) error {

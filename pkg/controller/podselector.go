@@ -19,8 +19,8 @@ func newPodSelector(labelSelector labels.Selector) *podSelector {
 		ipset:    ipset.NewHashIP("meh")}
 }
 
-func (ps *podSelector) matches(labels map[string]string) bool {
-	return false
+func (ps *podSelector) matches(labelMap map[string]string) bool {
+	return ps.selector.Matches(labels.Set(labelMap))
 }
 
 func (ps *podSelector) addIP(ip string) error {
