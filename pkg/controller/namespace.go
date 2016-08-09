@@ -31,82 +31,175 @@ func (ns *ns) empty() bool {
 
 func (ns *ns) addPod(obj *api.Pod) error {
 	ns.pods[obj.ObjectMeta.UID] = obj
-	return ns.addPodIP(obj)
+
+	if !hasIP(obj) {
+		return nil
+	}
+
+	return ns.addToMatching(obj)
 }
 
 func (ns *ns) updatePod(oldObj, newObj *api.Pod) error {
-	if oldObj.Status.PodIP != newObj.Status.PodIP {
-		if err := ns.delPodIP(oldObj); err != nil {
-			return err
-		}
-		if err := ns.addPodIP(newObj); err != nil {
-			return err
-		}
+	delete(ns.pods, oldObj.ObjectMeta.UID)
+	ns.pods[newObj.ObjectMeta.UID] = newObj
+
+	if !hasIP(oldObj) && !hasIP(newObj) {
+		return nil
 	}
 
-	// TODO re-evaluate on label change
+	if hasIP(oldObj) && !hasIP(newObj) {
+		return ns.delFromMatching(oldObj)
+	}
+
+	if !hasIP(oldObj) && hasIP(newObj) {
+		return ns.addToMatching(newObj)
+	}
+
+	if !equals(oldObj.ObjectMeta.Labels, newObj.ObjectMeta.Labels) ||
+		oldObj.Status.PodIP != newObj.Status.PodIP {
+
+		for _, ps := range ns.podSelectors {
+			oldMatch := ps.matches(oldObj.ObjectMeta.Labels)
+			newMatch := ps.matches(newObj.ObjectMeta.Labels)
+			if oldMatch == newMatch && oldObj.Status.PodIP == newObj.Status.PodIP {
+				continue
+			}
+			if oldMatch {
+				if err := ps.delIP(oldObj.Status.PodIP); err != nil {
+					return err
+				}
+			}
+			if newMatch {
+				if err := ps.addIP(newObj.Status.PodIP); err != nil {
+					return err
+				}
+			}
+		}
+	}
 
 	return nil
 }
 
 func (ns *ns) deletePod(obj *api.Pod) error {
-	if err := ns.delPodIP(obj); err != nil {
-		return err
-	}
 	delete(ns.pods, obj.ObjectMeta.UID)
-	return nil
-}
 
-func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
-	return nil
-}
-
-func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error {
-	return nil
-}
-
-func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
-	return nil
-}
-
-func (ns *ns) addNamespace(obj *api.Namespace) error {
-	return nil
-}
-
-func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
-	return nil
-}
-
-func (ns *ns) deleteNamespace(obj *api.Namespace) error {
-	return nil
-}
-
-func (ns *ns) addPodIP(pod *api.Pod) error {
-	if len(pod.Status.PodIP) == 0 {
+	if !hasIP(obj) {
 		return nil
 	}
-	if err := ns.ipset.AddIP(pod.Status.PodIP); err != nil {
-		return err
-	}
-	for _, ps := range ns.podSelectors {
-		if err := ps.addPodIP(pod); err != nil {
-			return err
-		}
-	}
+
+	return ns.delFromMatching(obj)
+}
+
+func (ns *ns) addNetworkPolicy(nsSelectors map[string]*nsSelector, obj *extensions.NetworkPolicy) error {
 	return nil
 }
 
-func (ns *ns) delPodIP(pod *api.Pod) error {
-	if len(pod.Status.PodIP) == 0 {
-		return nil
-	}
-	if err := ns.ipset.DelIP(pod.Status.PodIP); err != nil {
-		return err
-	}
-	for _, ps := range ns.podSelectors {
-		if err := ps.delPodIP(pod); err != nil {
-			return err
+func (ns *ns) updateNetworkPolicy(nsSelectors map[string]*nsSelector, oldObj, newObj *extensions.NetworkPolicy) error {
+	return nil
+}
+
+func (ns *ns) deleteNetworkPolicy(nsSelectors map[string]*nsSelector, obj *extensions.NetworkPolicy) error {
+	return nil
+}
+
+func (ns *ns) addNamespace(nsSelectors map[string]*nsSelector, obj *api.Namespace) error {
+	ns.namespace = obj
+
+	for _, nss := range nsSelectors {
+		if nss.matches(obj.ObjectMeta.Labels) {
+			if err := nss.addList(ns.ipset.Name()); err != nil {
+				return err
+			}
 		}
 	}
+
 	return nil
+}
+
+func (ns *ns) updateNamespace(nsSelectors map[string]*nsSelector, oldObj, newObj *api.Namespace) error {
+	ns.namespace = newObj
+
+	if !equals(oldObj.ObjectMeta.Labels, newObj.ObjectMeta.Labels) {
+		for _, nss := range nsSelectors {
+			oldMatch := nss.matches(oldObj.ObjectMeta.Labels)
+			newMatch := nss.matches(newObj.ObjectMeta.Labels)
+			if oldMatch == newMatch {
+				continue
+			}
+			if oldMatch {
+				if err := nss.delList(ns.ipset.Name()); err != nil {
+					return err
+				}
+			}
+			if newMatch {
+				if err := nss.addList(ns.ipset.Name()); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (ns *ns) deleteNamespace(nsSelectors map[string]*nsSelector, obj *api.Namespace) error {
+	ns.namespace = nil
+
+	for _, nss := range nsSelectors {
+		if nss.matches(obj.ObjectMeta.Labels) {
+			if err := nss.delList(ns.ipset.Name()); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (ns *ns) addToMatching(obj *api.Pod) error {
+	if err := ns.ipset.AddIP(obj.Status.PodIP); err != nil {
+		return err
+	}
+
+	for _, ps := range ns.podSelectors {
+		if ps.matches(obj.ObjectMeta.Labels) {
+			if err := ps.addIP(obj.Status.PodIP); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (ns *ns) delFromMatching(obj *api.Pod) error {
+	if err := ns.ipset.DelIP(obj.Status.PodIP); err != nil {
+		return err
+	}
+
+	for _, ps := range ns.podSelectors {
+		if ps.matches(obj.ObjectMeta.Labels) {
+			if err := ps.delIP(obj.Status.PodIP); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func hasIP(pod *api.Pod) bool {
+	return len(pod.Status.PodIP) > 0
+}
+
+func equals(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for ak, av := range a {
+		if b[ak] != av {
+			return false
+		}
+	}
+	return true
 }

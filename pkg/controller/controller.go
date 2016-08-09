@@ -8,15 +8,15 @@ import (
 
 type NetworkPolicyController interface {
 	AddNamespace(ns *api.Namespace) error
-	UpdateNamespace(old, new *api.Namespace) error
+	UpdateNamespace(oldObj, newObj *api.Namespace) error
 	DeleteNamespace(ns *api.Namespace) error
 
 	AddPod(obj *api.Pod) error
-	UpdatePod(old, new *api.Pod) error
+	UpdatePod(oldObj, newObj *api.Pod) error
 	DeletePod(obj *api.Pod) error
 
 	AddNetworkPolicy(obj *extensions.NetworkPolicy) error
-	UpdateNetworkPolicy(old, new *extensions.NetworkPolicy) error
+	UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error
 	DeleteNetworkPolicy(obj *extensions.NetworkPolicy) error
 }
 
@@ -28,7 +28,9 @@ type controller struct {
 }
 
 func New() NetworkPolicyController {
-	return &controller{}
+	return &controller{
+		nss:         make(map[string]*ns),
+		nsSelectors: make(map[string]*nsSelector)}
 }
 
 func (npc *controller) withNS(name string, f func(ns *ns) error) error {
@@ -78,7 +80,7 @@ func (npc *controller) AddNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.addNetworkPolicy(obj)
+		return ns.addNetworkPolicy(npc.nsSelectors, obj)
 	})
 }
 
@@ -87,7 +89,7 @@ func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPol
 	defer npc.Unlock()
 
 	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.updateNetworkPolicy(oldObj, newObj)
+		return ns.updateNetworkPolicy(npc.nsSelectors, oldObj, newObj)
 	})
 }
 
@@ -96,7 +98,7 @@ func (npc *controller) DeleteNetworkPolicy(obj *extensions.NetworkPolicy) error 
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.deleteNetworkPolicy(obj)
+		return ns.deleteNetworkPolicy(npc.nsSelectors, obj)
 	})
 }
 
@@ -104,8 +106,8 @@ func (npc *controller) AddNamespace(obj *api.Namespace) error {
 	npc.Lock()
 	defer npc.Unlock()
 
-	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.addNamespace(obj)
+	return npc.withNS(obj.ObjectMeta.Name, func(ns *ns) error {
+		return ns.addNamespace(npc.nsSelectors, obj)
 	})
 }
 
@@ -113,8 +115,8 @@ func (npc *controller) UpdateNamespace(oldObj, newObj *api.Namespace) error {
 	npc.Lock()
 	defer npc.Unlock()
 
-	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.updateNamespace(oldObj, newObj)
+	return npc.withNS(oldObj.ObjectMeta.Name, func(ns *ns) error {
+		return ns.updateNamespace(npc.nsSelectors, oldObj, newObj)
 	})
 }
 
@@ -122,7 +124,7 @@ func (npc *controller) DeleteNamespace(obj *api.Namespace) error {
 	npc.Lock()
 	defer npc.Unlock()
 
-	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.deleteNamespace(obj)
+	return npc.withNS(obj.ObjectMeta.Name, func(ns *ns) error {
+		return ns.deleteNamespace(npc.nsSelectors, obj)
 	})
 }

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"github.com/weaveworks/weave-npc/pkg/ipset"
-	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/types"
 )
@@ -13,28 +12,21 @@ type podSelector struct {
 	ipset    ipset.HashIP           // hash:ip ipset of matching pod IPs
 }
 
-func newPodSelector() *podSelector {
+func newPodSelector(labelSelector labels.Selector) *podSelector {
 	return &podSelector{
 		policies: make(map[types.UID]struct{}),
+		selector: labelSelector,
 		ipset:    ipset.NewHashIP("meh")}
 }
 
-func (ps *podSelector) addPodIP(pod *api.Pod) error {
-	if len(pod.Status.PodIP) == 0 {
-		return nil
-	}
-	if err := ps.ipset.AddIP(pod.Status.PodIP); err != nil {
-		return err
-	}
-	return nil
+func (ps *podSelector) matches(labels map[string]string) bool {
+	return false
 }
 
-func (ps *podSelector) delPodIP(pod *api.Pod) error {
-	if len(pod.Status.PodIP) == 0 {
-		return nil
-	}
-	if err := ps.ipset.DelIP(pod.Status.PodIP); err != nil {
-		return err
-	}
-	return nil
+func (ps *podSelector) addIP(ip string) error {
+	return ps.ipset.AddIP(ip)
+}
+
+func (ps *podSelector) delIP(ip string) error {
+	return ps.ipset.DelIP(ip)
 }
