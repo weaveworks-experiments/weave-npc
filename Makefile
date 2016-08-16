@@ -13,7 +13,7 @@ DEPS=$(call godeps,./cmd/weave-npc)
 
 cmd/weave-npc/weave-npc: $(DEPS)
 cmd/weave-npc/weave-npc: cmd/weave-npc/*.go
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/weave-npc
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $@ cmd/weave-npc/main.go
 
 build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc
 	mkdir build
