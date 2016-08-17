@@ -13,15 +13,17 @@ type ns struct {
 	pods         map[types.UID]*api.Pod                  // pod UID -> k8s Pods
 	policies     map[types.UID]*extensions.NetworkPolicy // policy UID -> k8s NetworkPolicy
 	ipset        ipset.HashIP                            // hash:ip ipset of pod IPs in this namespace
+	nsSelectors  map[string]*nsSelector                  // selector string -> nsSelector
 	podSelectors map[string]*podSelector                 // selector string -> podSelector
 }
 
-func newNS(name string) *ns {
+func newNS(name string, nsSelectors map[string]*nsSelector) *ns {
 	return &ns{
 		name:         name,
 		pods:         make(map[types.UID]*api.Pod),
 		policies:     make(map[types.UID]*extensions.NetworkPolicy),
 		ipset:        ipset.NewHashIP(encodeBase95("ns", name)),
+		nsSelectors:  make(map[string]*nsSelector),
 		podSelectors: make(map[string]*podSelector)}
 }
 
@@ -90,22 +92,22 @@ func (ns *ns) deletePod(obj *api.Pod) error {
 	return ns.delFromMatching(obj)
 }
 
-func (ns *ns) addNetworkPolicy(nsSelectors map[string]*nsSelector, obj *extensions.NetworkPolicy) error {
+func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	return nil
 }
 
-func (ns *ns) updateNetworkPolicy(nsSelectors map[string]*nsSelector, oldObj, newObj *extensions.NetworkPolicy) error {
+func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error {
 	return nil
 }
 
-func (ns *ns) deleteNetworkPolicy(nsSelectors map[string]*nsSelector, obj *extensions.NetworkPolicy) error {
+func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	return nil
 }
 
-func (ns *ns) addNamespace(nsSelectors map[string]*nsSelector, obj *api.Namespace) error {
+func (ns *ns) addNamespace(obj *api.Namespace) error {
 	ns.namespace = obj
 
-	for _, nss := range nsSelectors {
+	for _, nss := range ns.nsSelectors {
 		if nss.matches(obj.ObjectMeta.Labels) {
 			if err := nss.addList(ns.ipset.Name()); err != nil {
 				return err
@@ -116,11 +118,11 @@ func (ns *ns) addNamespace(nsSelectors map[string]*nsSelector, obj *api.Namespac
 	return nil
 }
 
-func (ns *ns) updateNamespace(nsSelectors map[string]*nsSelector, oldObj, newObj *api.Namespace) error {
+func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 	ns.namespace = newObj
 
 	if !equals(oldObj.ObjectMeta.Labels, newObj.ObjectMeta.Labels) {
-		for _, nss := range nsSelectors {
+		for _, nss := range ns.nsSelectors {
 			oldMatch := nss.matches(oldObj.ObjectMeta.Labels)
 			newMatch := nss.matches(newObj.ObjectMeta.Labels)
 			if oldMatch == newMatch {
@@ -142,10 +144,10 @@ func (ns *ns) updateNamespace(nsSelectors map[string]*nsSelector, oldObj, newObj
 	return nil
 }
 
-func (ns *ns) deleteNamespace(nsSelectors map[string]*nsSelector, obj *api.Namespace) error {
+func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 	ns.namespace = nil
 
-	for _, nss := range nsSelectors {
+	for _, nss := range ns.nsSelectors {
 		if nss.matches(obj.ObjectMeta.Labels) {
 			if err := nss.delList(ns.ipset.Name()); err != nil {
 				return err
