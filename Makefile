@@ -16,7 +16,7 @@ cmd/weave-npc/weave-npc: cmd/weave-npc/*.go
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $@ cmd/weave-npc/main.go
 
 build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc
-	mkdir build
+	mkdir -p build
 	cp $^ build
 	sudo docker build -t harrisonadamw/weave-npc -f build/Dockerfile ./build
 	sudo docker push harrisonadamw/weave-npc
