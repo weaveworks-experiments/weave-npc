@@ -23,6 +23,10 @@ build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc
 	touch $@
 
 deploy: all
-	kubectl delete -f k8s/daemonset.yaml
 	kubectl create -f k8s/daemonset.yaml
 
+redeploy: all
+	kubectl delete pods --namespace kube-system -l k8s-app=weave-npc
+
+undeploy:
+	kubectl delete -f k8s/daemonset.yaml
