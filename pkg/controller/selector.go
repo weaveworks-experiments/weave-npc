@@ -13,7 +13,7 @@ type selector struct {
 	policies map[types.UID]struct{}     // set of policies which depend on this selector
 }
 
-func NewSelector(json *unversioned.LabelSelector) (*selector, error) {
+func newSelector(json *unversioned.LabelSelector) (*selector, error) {
 	dom, err := unversioned.LabelSelectorAsSelector(json)
 	if err != nil {
 		return nil, err

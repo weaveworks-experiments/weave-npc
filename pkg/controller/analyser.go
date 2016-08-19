@@ -8,7 +8,7 @@ func AnalysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors 
 	nsSelectors = make(map[string]*selector)
 	podSelectors = make(map[string]*selector)
 
-	podSelector, err := NewSelector(&policy.Spec.PodSelector)
+	podSelector, err := newSelector(&policy.Spec.PodSelector)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -18,14 +18,14 @@ func AnalysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors 
 		if ingressRule.From != nil {
 			for _, peer := range ingressRule.From {
 				if peer.PodSelector != nil {
-					podSelector, err := NewSelector(peer.PodSelector)
+					podSelector, err := newSelector(peer.PodSelector)
 					if err != nil {
 						return nil, nil, err
 					}
 					podSelectors[podSelector.str] = podSelector
 				}
 				if peer.NamespaceSelector != nil {
-					nsSelector, err := NewSelector(peer.NamespaceSelector)
+					nsSelector, err := newSelector(peer.NamespaceSelector)
 					if err != nil {
 						return nil, nil, err
 					}
