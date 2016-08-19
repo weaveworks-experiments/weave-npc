@@ -17,7 +17,7 @@ type ns struct {
 	podSelectors map[string]*selector                    // selector string -> podSelector
 }
 
-func newNS(name string, nsSelectors map[string]*nsSelector) *ns {
+func newNS(name string, nsSelectors map[string]*selector) *ns {
 	return &ns{
 		name:         name,
 		pods:         make(map[types.UID]*api.Pod),
