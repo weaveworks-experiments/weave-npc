@@ -9,7 +9,7 @@ import (
 type podSelector struct {
 	policies map[types.UID]struct{} // set of policies which utilise this selector
 	selector labels.Selector        // k8s selector for matching pod labels
-	ipset    ipset.HashIP           // hash:ip ipset of matching pod IPs
+	ipset    ipset.IPSet            // hash:ip ipset of matching pod IPs
 }
 
 func newPodSelector(labelSelector labels.Selector) *podSelector {
@@ -24,9 +24,9 @@ func (ps *podSelector) matches(labelMap map[string]string) bool {
 }
 
 func (ps *podSelector) addIP(ip string) error {
-	return ps.ipset.AddIP(ip)
+	return ps.ipset.AddEntry(ip)
 }
 
 func (ps *podSelector) delIP(ip string) error {
-	return ps.ipset.DelIP(ip)
+	return ps.ipset.DelEntry(ip)
 }

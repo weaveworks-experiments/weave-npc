@@ -9,7 +9,7 @@ import (
 type nsSelector struct {
 	policies map[types.UID]struct{} // policies which reference this selector
 	selector labels.Selector        // k8s selector for matching namespace labels
-	ipset    ipset.ListSet          // list:set ipset of matching namespace hash:ip ipsets
+	ipset    ipset.IPSet            // list:set ipset of matching namespace hash:ip ipsets
 }
 
 func newNSSelector(labelSelector labels.Selector) *nsSelector {
@@ -24,9 +24,9 @@ func (nss *nsSelector) matches(labelMap map[string]string) bool {
 }
 
 func (ns *nsSelector) addList(name string) error {
-	return ns.ipset.AddList(name)
+	return ns.ipset.AddEntry(name)
 }
 
 func (ns *nsSelector) delList(name string) error {
-	return ns.ipset.DelList(name)
+	return ns.ipset.DelEntry(name)
 }

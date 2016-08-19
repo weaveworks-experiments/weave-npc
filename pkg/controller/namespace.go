@@ -12,7 +12,7 @@ type ns struct {
 	namespace    *api.Namespace
 	pods         map[types.UID]*api.Pod                  // pod UID -> k8s Pods
 	policies     map[types.UID]*extensions.NetworkPolicy // policy UID -> k8s NetworkPolicy
-	ipset        ipset.HashIP                            // hash:ip ipset of pod IPs in this namespace
+	ipset        ipset.IPSet                             // hash:ip ipset of pod IPs in this namespace
 	nsSelectors  map[string]*nsSelector                  // selector string -> nsSelector
 	podSelectors map[string]*podSelector                 // selector string -> podSelector
 }
@@ -159,7 +159,7 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 }
 
 func (ns *ns) addToMatching(obj *api.Pod) error {
-	if err := ns.ipset.AddIP(obj.Status.PodIP); err != nil {
+	if err := ns.ipset.AddEntry(obj.Status.PodIP); err != nil {
 		return err
 	}
 
@@ -175,7 +175,7 @@ func (ns *ns) addToMatching(obj *api.Pod) error {
 }
 
 func (ns *ns) delFromMatching(obj *api.Pod) error {
-	if err := ns.ipset.DelIP(obj.Status.PodIP); err != nil {
+	if err := ns.ipset.DelEntry(obj.Status.PodIP); err != nil {
 		return err
 	}
 
