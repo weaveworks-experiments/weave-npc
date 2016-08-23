@@ -97,7 +97,7 @@ func (ns *ns) deletePod(obj *api.Pod) error {
 func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	ns.policies[obj.ObjectMeta.UID] = obj
 
-	nsSelectors, podSelectors, err := analysePolicy(obj)
+	nsSelectors, podSelectors, _, err := analysePolicy(obj)
 	if err != nil {
 		return err
 	}
@@ -153,12 +153,12 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 	delete(ns.policies, oldObj.ObjectMeta.UID)
 	ns.policies[newObj.ObjectMeta.UID] = newObj
 
-	oldNsSelectors, oldPodSelectors, err := analysePolicy(oldObj)
+	oldNsSelectors, oldPodSelectors, _, err := analysePolicy(oldObj)
 	if err != nil {
 		return err
 	}
 
-	newNsSelectors, newPodSelectors, err := analysePolicy(newObj)
+	newNsSelectors, newPodSelectors, _, err := analysePolicy(newObj)
 	if err != nil {
 		return err
 	}
@@ -167,6 +167,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 		for key, _ := range oldNsSelectors {
 			selector := ns.nsSelectors[key]
 			if _, found := newNsSelectors[key]; found {
+				// Object UIDs should not change, but handle it anyway
 				delete(selector.policies, oldObj.ObjectMeta.UID)
 				selector.policies[newObj.ObjectMeta.UID] = newObj
 			} else {
@@ -206,6 +207,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 		for key, _ := range oldPodSelectors {
 			selector := ns.podSelectors[key]
 			if _, found := newPodSelectors[key]; found {
+				// Object UIDs should not change, but handle it anyway
 				delete(selector.policies, oldObj.ObjectMeta.UID)
 				selector.policies[newObj.ObjectMeta.UID] = newObj
 			} else {
