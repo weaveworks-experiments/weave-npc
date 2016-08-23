@@ -36,8 +36,12 @@ func New() NetworkPolicyController {
 func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 	ns, found := npc.nss[name]
 	if !found {
-		ns = newNS(name, npc.nss, npc.nsSelectors)
-		npc.nss[name] = ns
+		newNs, err := newNS(name, npc.nss, npc.nsSelectors)
+		if err != nil {
+			return err
+		}
+		npc.nss[name] = newNs
+		ns = newNs
 	}
 	if err := f(ns); err != nil {
 		return err

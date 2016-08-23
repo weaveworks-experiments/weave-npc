@@ -54,7 +54,8 @@ func (s *selector) provision() error {
 	}
 
 	s.policies = make(map[types.UID]*extensions.NetworkPolicy)
-	s.ipset = ipset.New("", s.ipsetTypeName)
+	// TODO needs to be prefixed with namespace name for pod selectors!
+	s.ipset = ipset.New(shortName(s.str), s.ipsetTypeName)
 
 	return s.ipset.Create()
 }

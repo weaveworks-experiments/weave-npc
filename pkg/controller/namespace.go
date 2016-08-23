@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/pkg/errors"
 	"github.com/weaveworks/weave-npc/pkg/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
@@ -18,15 +19,19 @@ type ns struct {
 	nsSelectors  selectorSet                             // selector string -> nsSelector
 }
 
-func newNS(name string, nss map[string]*ns, nsSelectors selectorSet) *ns {
+func newNS(name string, nss map[string]*ns, nsSelectors selectorSet) (*ns, error) {
+	ipset := ipset.New(shortName(name), "hash:ip")
+	if err := ipset.Create(); err != nil {
+		return nil, err
+	}
 	return &ns{
 		name:         name,
 		pods:         make(map[types.UID]*api.Pod),
 		policies:     make(map[types.UID]*extensions.NetworkPolicy),
-		ipset:        ipset.New(shortName(name), "hash:ip"),
+		ipset:        ipset,
 		podSelectors: newSelectorSet(),
 		nss:          nss,
-		nsSelectors:  nsSelectors}
+		nsSelectors:  nsSelectors}, nil
 }
 
 func (ns *ns) empty() bool {
@@ -370,7 +375,7 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 
 func (ns *ns) addToMatching(obj *api.Pod) error {
 	if err := ns.ipset.AddEntry(obj.Status.PodIP); err != nil {
-		return err
+		return errors.Wrap(err, "addToMatching")
 	}
 
 	for _, ps := range ns.podSelectors {

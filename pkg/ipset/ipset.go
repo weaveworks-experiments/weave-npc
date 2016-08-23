@@ -1,6 +1,7 @@
 package ipset
 
 import (
+	"github.com/pkg/errors"
 	"os/exec"
 )
 
@@ -31,8 +32,12 @@ func (i *ipset) TypeName() string {
 }
 
 func (i *ipset) Create() error {
-	if err := exec.Command("/usr/sbin/ipset", "create", i.name, i.typeName).Run(); err != nil {
-		return err
+	if _, err := exec.Command("/usr/sbin/ipset", "create", i.name, i.typeName).Output(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return errors.Wrapf(err, "ipset create %s %s failed: %s", i.name, i.typeName, ee.Stderr)
+		} else {
+			return errors.Wrapf(err, "ipset create %s %s failed", i.name, i.typeName)
+		}
 	}
 	return nil
 }
@@ -40,7 +45,7 @@ func (i *ipset) Create() error {
 func (i *ipset) AddEntry(entry string) error {
 	if _, found := i.entries[entry]; !found {
 		if err := exec.Command("/usr/sbin/ipset", "add", i.name, entry).Run(); err != nil {
-			return err
+			return errors.Wrapf(err, "ipset add %s %s failed", i.name, entry)
 		}
 		i.entries[entry] = struct{}{}
 	}
@@ -50,7 +55,7 @@ func (i *ipset) AddEntry(entry string) error {
 func (i *ipset) DelEntry(entry string) error {
 	if _, found := i.entries[entry]; found {
 		if err := exec.Command("/usr/sbin/ipset", "del", i.name, entry).Run(); err != nil {
-			return err
+			return errors.Wrapf(err, "ipset del %s %s failed", i.name, entry)
 		}
 		delete(i.entries, entry)
 	}
@@ -59,7 +64,7 @@ func (i *ipset) DelEntry(entry string) error {
 
 func (i *ipset) Destroy() error {
 	if err := exec.Command("/usr/sbin/ipset", "destroy", i.name).Run(); err != nil {
-		return err
+		return errors.Wrapf(err, "ipset destroy %s failed", i.name)
 	}
 	return nil
 }
