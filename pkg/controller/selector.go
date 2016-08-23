@@ -40,10 +40,46 @@ func (s *selector) delEntry(name string) error {
 	return s.ipset.DelEntry(name)
 }
 
-func (s *selector) realise() error {
+func (s *selector) provision() error {
 	if s.policies != nil {
-		return fmt.Errorf("Attempt to re-realise selector %s", s.str)
+		return fmt.Errorf("Selector already provisioned: %s", s.str)
 	}
 	s.policies = make(map[types.UID]*extensions.NetworkPolicy)
+
+	// TODO create ipset
+
+	return nil
+}
+
+func (s *selector) deprovision() error {
+	if s.policies == nil {
+		return fmt.Errorf("Selector already deprovisioned: %s", s.str)
+	}
+	if len(s.policies) != 0 {
+		return fmt.Errorf("Cannot deprovision in-use selector: %s", s.str)
+	}
+	s.policies = nil
+
+	// TODO remove ipset
+
+	return nil
+}
+
+type selectorSet map[string]*selector
+
+func newSelectorSet() selectorSet {
+	return selectorSet(make(map[string]*selector))
+}
+
+func (ss selectorSet) dereference(policy *extensions.NetworkPolicy) error {
+	for key, selector := range ss {
+		delete(selector.policies, policy.ObjectMeta.UID)
+		if len(selector.policies) == 0 {
+			if err := selector.deprovision(); err != nil {
+				return err
+			}
+			delete(ss, key)
+		}
+	}
 	return nil
 }

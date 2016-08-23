@@ -23,20 +23,20 @@ type NetworkPolicyController interface {
 type controller struct {
 	sync.Mutex
 
-	nss         map[string]*ns       // ns name -> ns struct
-	nsSelectors map[string]*selector // selector string -> nsSelector
+	nss         map[string]*ns // ns name -> ns struct
+	nsSelectors selectorSet    // selector string -> nsSelector
 }
 
 func New() NetworkPolicyController {
 	return &controller{
 		nss:         make(map[string]*ns),
-		nsSelectors: make(map[string]*selector)}
+		nsSelectors: newSelectorSet()}
 }
 
 func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 	ns, found := npc.nss[name]
 	if !found {
-		ns = newNS(name, npc.nsSelectors)
+		ns = newNS(name, npc.nss, npc.nsSelectors)
 		npc.nss[name] = ns
 	}
 	if err := f(ns); err != nil {

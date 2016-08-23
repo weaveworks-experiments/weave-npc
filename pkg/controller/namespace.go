@@ -13,18 +13,20 @@ type ns struct {
 	pods         map[types.UID]*api.Pod                  // pod UID -> k8s Pods
 	policies     map[types.UID]*extensions.NetworkPolicy // policy UID -> k8s NetworkPolicy
 	ipset        ipset.IPSet                             // hash:ip ipset of pod IPs in this namespace
-	nsSelectors  map[string]*selector                    // selector string -> nsSelector
-	podSelectors map[string]*selector                    // selector string -> podSelector
+	podSelectors selectorSet                             // selector string -> podSelector
+	nss          map[string]*ns                          // ns name -> ns struct
+	nsSelectors  selectorSet                             // selector string -> nsSelector
 }
 
-func newNS(name string, nsSelectors map[string]*selector) *ns {
+func newNS(name string, nss map[string]*ns, nsSelectors selectorSet) *ns {
 	return &ns{
 		name:         name,
 		pods:         make(map[types.UID]*api.Pod),
 		policies:     make(map[types.UID]*extensions.NetworkPolicy),
 		ipset:        ipset.NewHashIP(encodeBase95("ns", name)),
-		nsSelectors:  make(map[string]*selector),
-		podSelectors: make(map[string]*selector)}
+		podSelectors: newSelectorSet(),
+		nss:          nss,
+		nsSelectors:  nsSelectors}
 }
 
 func (ns *ns) empty() bool {
@@ -104,12 +106,21 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		if existingSelector, found := ns.nsSelectors[selectorKey]; found {
 			existingSelector.policies[obj.ObjectMeta.UID] = obj
 		} else {
-			if err := selector.realise(); err != nil {
-				return err
-			}
 			selector.policies[obj.ObjectMeta.UID] = obj
 
-			// TODO - add matching namespace ipset names
+			if err := selector.provision(); err != nil {
+				return err
+			}
+
+			for _, otherNs := range ns.nss {
+				if otherNs.namespace != nil {
+					if selector.matches(otherNs.namespace.ObjectMeta.Labels) {
+						if err := selector.addEntry(otherNs.ipset.Name()); err != nil {
+							return err
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -119,7 +130,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		} else {
 			selector.policies[obj.ObjectMeta.UID] = obj
 
-			if err := selector.realise(); err != nil {
+			if err := selector.provision(); err != nil {
 				return err
 			}
 
@@ -139,10 +150,23 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 }
 
 func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error {
+	delete(ns.policies, oldObj.ObjectMeta.UID)
+	ns.policies[newObj.ObjectMeta.UID] = newObj
+
 	return nil
 }
 
 func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
+	delete(ns.policies, obj.ObjectMeta.UID)
+
+	if err := ns.podSelectors.dereference(obj); err != nil {
+		return err
+	}
+
+	if err := ns.nsSelectors.dereference(obj); err != nil {
+		return err
+	}
+
 	return nil
 }
 
