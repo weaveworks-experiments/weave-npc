@@ -93,6 +93,48 @@ func (ns *ns) deletePod(obj *api.Pod) error {
 }
 
 func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
+	ns.policies[obj.ObjectMeta.UID] = obj
+
+	nsSelectors, podSelectors, err := analysePolicy(obj)
+	if err != nil {
+		return err
+	}
+
+	for selectorKey, selector := range nsSelectors {
+		if existingSelector, found := ns.nsSelectors[selectorKey]; found {
+			existingSelector.policies[obj.ObjectMeta.UID] = obj
+		} else {
+			if err := selector.realise(); err != nil {
+				return err
+			}
+			selector.policies[obj.ObjectMeta.UID] = obj
+
+			// TODO - add matching namespace ipset names
+		}
+	}
+
+	for selectorKey, selector := range podSelectors {
+		if existingSelector, found := ns.podSelectors[selectorKey]; found {
+			existingSelector.policies[obj.ObjectMeta.UID] = obj
+		} else {
+			selector.policies[obj.ObjectMeta.UID] = obj
+
+			if err := selector.realise(); err != nil {
+				return err
+			}
+
+			for _, pod := range ns.pods {
+				if hasIP(pod) {
+					if selector.matches(pod.ObjectMeta.Labels) {
+						if err := selector.addEntry(pod.Status.PodIP); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 

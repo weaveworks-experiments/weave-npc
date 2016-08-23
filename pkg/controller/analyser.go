@@ -4,7 +4,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/extensions"
 )
 
-func AnalysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors map[string]*selector, err error) {
+func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors map[string]*selector, err error) {
 	nsSelectors = make(map[string]*selector)
 	podSelectors = make(map[string]*selector)
 
