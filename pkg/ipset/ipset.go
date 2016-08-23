@@ -32,7 +32,7 @@ func (i *ipset) TypeName() string {
 }
 
 func (i *ipset) Create() error {
-	if _, err := exec.Command("/usr/sbin/ipset", "create", i.name, i.typeName).Output(); err != nil {
+	if _, err := exec.Command("ipset", "create", i.name, i.typeName).Output(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
 			return errors.Wrapf(err, "ipset create %s %s failed: %s", i.name, i.typeName, ee.Stderr)
 		} else {
@@ -44,8 +44,12 @@ func (i *ipset) Create() error {
 
 func (i *ipset) AddEntry(entry string) error {
 	if _, found := i.entries[entry]; !found {
-		if err := exec.Command("/usr/sbin/ipset", "add", i.name, entry).Run(); err != nil {
-			return errors.Wrapf(err, "ipset add %s %s failed", i.name, entry)
+		if err := exec.Command("ipset", "add", i.name, entry).Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				return errors.Wrapf(err, "ipset add %s %s failed: %s", i.name, entry, ee.Stderr)
+			} else {
+				return errors.Wrapf(err, "ipset add %s %s failed", i.name, entry)
+			}
 		}
 		i.entries[entry] = struct{}{}
 	}
@@ -54,8 +58,12 @@ func (i *ipset) AddEntry(entry string) error {
 
 func (i *ipset) DelEntry(entry string) error {
 	if _, found := i.entries[entry]; found {
-		if err := exec.Command("/usr/sbin/ipset", "del", i.name, entry).Run(); err != nil {
-			return errors.Wrapf(err, "ipset del %s %s failed", i.name, entry)
+		if err := exec.Command("ipset", "del", i.name, entry).Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				return errors.Wrapf(err, "ipset del %s %s failed: %s", i.name, entry, ee.Stderr)
+			} else {
+				return errors.Wrapf(err, "ipset del %s %s failed", i.name, entry)
+			}
 		}
 		delete(i.entries, entry)
 	}
@@ -63,8 +71,12 @@ func (i *ipset) DelEntry(entry string) error {
 }
 
 func (i *ipset) Destroy() error {
-	if err := exec.Command("/usr/sbin/ipset", "destroy", i.name).Run(); err != nil {
-		return errors.Wrapf(err, "ipset destroy %s failed", i.name)
+	if err := exec.Command("ipset", "destroy", i.name).Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return errors.Wrapf(err, "ipset destroy %s failed: %s", i.name, ee.Stderr)
+		} else {
+			return errors.Wrapf(err, "ipset destroy %s failed", i.name)
+		}
 	}
 	return nil
 }
