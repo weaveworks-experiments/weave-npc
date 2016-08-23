@@ -97,11 +97,13 @@ func (ns *ns) deletePod(obj *api.Pod) error {
 func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	ns.policies[obj.ObjectMeta.UID] = obj
 
-	nsSelectors, podSelectors, _, err := analysePolicy(obj)
+	// Analyse policy, determine which rules and ipsets are required
+	rules, nsSelectors, podSelectors, err := analysePolicy(obj)
 	if err != nil {
 		return err
 	}
 
+	// Provision any missing namespace selector ipsets; reference existing
 	for selectorKey, selector := range nsSelectors {
 		if existingSelector, found := ns.nsSelectors[selectorKey]; found {
 			existingSelector.policies[obj.ObjectMeta.UID] = obj
@@ -124,6 +126,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		}
 	}
 
+	// Provision any missing pod selector ipsets; reference existing
 	for selectorKey, selector := range podSelectors {
 		if existingSelector, found := ns.podSelectors[selectorKey]; found {
 			existingSelector.policies[obj.ObjectMeta.UID] = obj
@@ -146,6 +149,13 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		}
 	}
 
+	// No need to reference count rules - iptables permits duplicates
+	for _, rule := range rules {
+		if err := rule.provision(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -153,17 +163,19 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 	delete(ns.policies, oldObj.ObjectMeta.UID)
 	ns.policies[newObj.ObjectMeta.UID] = newObj
 
-	oldNsSelectors, oldPodSelectors, _, err := analysePolicy(oldObj)
+	// Analyse the old and the new policy so we can determine differences
+	oldRules, oldNsSelectors, oldPodSelectors, err := analysePolicy(oldObj)
+	if err != nil {
+		return err
+	}
+	newRules, newNsSelectors, newPodSelectors, err := analysePolicy(newObj)
 	if err != nil {
 		return err
 	}
 
-	newNsSelectors, newPodSelectors, _, err := analysePolicy(newObj)
-	if err != nil {
-		return err
-	}
-
-	{ // Handle namespace selector changes
+	{
+		// Handle namespace selector changes. Deprovision selector ipsets we no
+		// longer use, and create any new ones we require
 		for key, _ := range oldNsSelectors {
 			selector := ns.nsSelectors[key]
 			if _, found := newNsSelectors[key]; found {
@@ -203,7 +215,9 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 		}
 	}
 
-	{ // Handle pod selector changes
+	{
+		// Handle pod selector changes. Deprovision selector ipsets we no
+		// longer use, and create any new ones we require
 		for key, _ := range oldPodSelectors {
 			selector := ns.podSelectors[key]
 			if _, found := newPodSelectors[key]; found {
@@ -243,13 +257,40 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 		}
 	}
 
+	// Take advantage of iptables behaviour to avoid reference counting rules
+	for _, rule := range newRules {
+		if err := rule.provision(); err != nil {
+			return err
+		}
+	}
+	for _, rule := range oldRules {
+		if err := rule.deprovision(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	delete(ns.policies, obj.ObjectMeta.UID)
 
-	for key, selector := range ns.podSelectors {
+	// Analyse the old and the new policy so we can determine differences
+	rules, nsSelectors, podSelectors, err := analysePolicy(obj)
+	if err != nil {
+		return err
+	}
+
+	// Remove rules first, so that ipsets are freed. No need to reference count
+	// rules - iptables deletion removes duplicated rules one at a time
+	for _, rule := range rules {
+		if err := rule.deprovision(); err != nil {
+			return err
+		}
+	}
+
+	// Deprovision pod selector ipsets that are no longer in use
+	for key, selector := range podSelectors {
 		delete(selector.policies, obj.ObjectMeta.UID)
 		if len(selector.policies) == 0 {
 			if err := selector.deprovision(); err != nil {
@@ -259,7 +300,8 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		}
 	}
 
-	for key, selector := range ns.nsSelectors {
+	// Deprovision namespace selector ipsets that are no longer in use
+	for key, selector := range nsSelectors {
 		delete(selector.policies, obj.ObjectMeta.UID)
 		if len(selector.policies) == 0 {
 			if err := selector.deprovision(); err != nil {

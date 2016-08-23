@@ -6,7 +6,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/intstr"
 )
 
-func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors selectorSet, rules []*rule, err error) {
+func analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, nsSelectors, podSelectors selectorSet, err error) {
 	nsSelectors = newSelectorSet()
 	podSelectors = newSelectorSet()
 	rules = make([]*rule, 0)
@@ -36,7 +36,7 @@ func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors 
 			} else {
 				// Ports is present and contains at least one item, then this rule allows traffic
 				// only if the traffic matches at least one port in the ports list.
-				withProtoAndPort(ingressRule.Ports, func(proto, port string) {
+				withNormalisedProtoAndPort(ingressRule.Ports, func(proto, port string) {
 					rules = append(rules, newRule(&proto, nil, dstSelector, &port))
 				})
 			}
@@ -66,7 +66,7 @@ func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors 
 				} else {
 					// Ports is present and contains at least one item, then this rule allows traffic
 					// only if the traffic matches at least one port in the ports list.
-					withProtoAndPort(ingressRule.Ports, func(proto, port string) {
+					withNormalisedProtoAndPort(ingressRule.Ports, func(proto, port string) {
 						rules = append(rules, newRule(&proto, srcSelector, dstSelector, &port))
 					})
 				}
@@ -74,10 +74,10 @@ func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors 
 		}
 	}
 
-	return nsSelectors, podSelectors, rules, nil
+	return rules, nsSelectors, podSelectors, nil
 }
 
-func withProtoAndPort(npps []extensions.NetworkPolicyPort, f func(proto, port string)) {
+func withNormalisedProtoAndPort(npps []extensions.NetworkPolicyPort, f func(proto, port string)) {
 	for _, npp := range npps {
 		// If no proto is specified, default to TCP
 		proto := string(api.ProtocolTCP)
