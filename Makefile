@@ -1,5 +1,5 @@
 .DEFAULT: all
-.PHONY: all clean deploy
+.PHONY: all clean deploy redeploy undeploy
 
 all: build/.image.done
 

@@ -6,7 +6,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/intstr"
 )
 
-func analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, nsSelectors, podSelectors selectorSet, err error) {
+func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, nsSelectors, podSelectors selectorSet, err error) {
 	nsSelectors = newSelectorSet()
 	podSelectors = newSelectorSet()
 	rules = make([]*rule, 0)

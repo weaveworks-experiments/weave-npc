@@ -19,3 +19,5 @@ spec:
       - name: weave-npc
         image: harrisonadamw/weave-npc
         imagePullPolicy: Always
+        securityContext:
+          privileged: true

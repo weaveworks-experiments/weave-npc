@@ -23,7 +23,7 @@ func newNS(name string, nss map[string]*ns, nsSelectors selectorSet) *ns {
 		name:         name,
 		pods:         make(map[types.UID]*api.Pod),
 		policies:     make(map[types.UID]*extensions.NetworkPolicy),
-		ipset:        ipset.New(encodeBase95("ns", name), "hash:ip"),
+		ipset:        ipset.New(shortName(name), "hash:ip"),
 		podSelectors: newSelectorSet(),
 		nss:          nss,
 		nsSelectors:  nsSelectors}
@@ -98,7 +98,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	ns.policies[obj.ObjectMeta.UID] = obj
 
 	// Analyse policy, determine which rules and ipsets are required
-	rules, nsSelectors, podSelectors, err := analysePolicy(obj)
+	rules, nsSelectors, podSelectors, err := ns.analysePolicy(obj)
 	if err != nil {
 		return err
 	}
@@ -164,11 +164,11 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 	ns.policies[newObj.ObjectMeta.UID] = newObj
 
 	// Analyse the old and the new policy so we can determine differences
-	oldRules, oldNsSelectors, oldPodSelectors, err := analysePolicy(oldObj)
+	oldRules, oldNsSelectors, oldPodSelectors, err := ns.analysePolicy(oldObj)
 	if err != nil {
 		return err
 	}
-	newRules, newNsSelectors, newPodSelectors, err := analysePolicy(newObj)
+	newRules, newNsSelectors, newPodSelectors, err := ns.analysePolicy(newObj)
 	if err != nil {
 		return err
 	}
@@ -276,7 +276,7 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	delete(ns.policies, obj.ObjectMeta.UID)
 
 	// Analyse the old and the new policy so we can determine differences
-	rules, nsSelectors, podSelectors, err := analysePolicy(obj)
+	rules, nsSelectors, podSelectors, err := ns.analysePolicy(obj)
 	if err != nil {
 		return err
 	}

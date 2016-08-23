@@ -31,7 +31,7 @@ func (i *ipset) TypeName() string {
 }
 
 func (i *ipset) Create() error {
-	if err := exec.Command("ipset", "create", i.name, i.typeName).Run(); err != nil {
+	if err := exec.Command("/usr/sbin/ipset", "create", i.name, i.typeName).Run(); err != nil {
 		return err
 	}
 	return nil
@@ -39,7 +39,7 @@ func (i *ipset) Create() error {
 
 func (i *ipset) AddEntry(entry string) error {
 	if _, found := i.entries[entry]; !found {
-		if err := exec.Command("ipset", "add", i.name, entry).Run(); err != nil {
+		if err := exec.Command("/usr/sbin/ipset", "add", i.name, entry).Run(); err != nil {
 			return err
 		}
 		i.entries[entry] = struct{}{}
@@ -49,7 +49,7 @@ func (i *ipset) AddEntry(entry string) error {
 
 func (i *ipset) DelEntry(entry string) error {
 	if _, found := i.entries[entry]; found {
-		if err := exec.Command("ipset", "del", i.name, entry).Run(); err != nil {
+		if err := exec.Command("/usr/sbin/ipset", "del", i.name, entry).Run(); err != nil {
 			return err
 		}
 		delete(i.entries, entry)
@@ -58,7 +58,7 @@ func (i *ipset) DelEntry(entry string) error {
 }
 
 func (i *ipset) Destroy() error {
-	if err := exec.Command("ipset", "destroy", i.name).Run(); err != nil {
+	if err := exec.Command("/usr/sbin/ipset", "destroy", i.name).Run(); err != nil {
 		return err
 	}
 	return nil
