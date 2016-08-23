@@ -18,11 +18,31 @@ func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors 
 	podSelectors[dstSelector.str] = dstSelector
 
 	for _, ingressRule := range policy.Spec.Ingress {
-		// If Ports is present but empty, this rule matches no traffic
 		if ingressRule.Ports != nil && len(ingressRule.Ports) == 0 {
+			// Ports is empty, this rule matches no ports (no traffic matches).
 			continue
 		}
-		if ingressRule.From != nil {
+
+		if ingressRule.From != nil && len(ingressRule.From) == 0 {
+			// From is empty, this rule matches no sources (no traffic matches).
+			continue
+		}
+
+		if ingressRule.From == nil {
+			// From is not provided, this rule matches all sources (traffic not restricted by source).
+			if ingressRule.Ports == nil {
+				// Ports is not provided, this rule matches all ports (traffic not restricted by port).
+				rules = append(rules, newRule(nil, nil, dstSelector, nil))
+			} else {
+				// Ports is present and contains at least one item, then this rule allows traffic
+				// only if the traffic matches at least one port in the ports list.
+				withProtoAndPort(ingressRule.Ports, func(proto, port string) {
+					rules = append(rules, newRule(&proto, nil, dstSelector, &port))
+				})
+			}
+		} else {
+			// From is present and contains at least on item, this rule allows traffic only if the
+			// traffic matches at least one item in the from list.
 			for _, peer := range ingressRule.From {
 				var srcSelector *selector
 				if peer.PodSelector != nil {
@@ -41,35 +61,42 @@ func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors 
 				}
 
 				if ingressRule.Ports == nil {
-					// Traffic is not restricted by proto/port
+					// Ports is not provided, this rule matches all ports (traffic not restricted by port).
 					rules = append(rules, newRule(nil, srcSelector, dstSelector, nil))
 				} else {
-					// Traffic is restricted by proto/port
-					for _, npp := range ingressRule.Ports {
-						// If no proto is specified, default to TCP
-						proto := string(api.ProtocolTCP)
-						if npp.Protocol != nil {
-							proto = string(*npp.Protocol)
-						}
-
-						// If no port is specified, match any port. Let iptables executable handle
-						// service name resolution
-						port := "0:65535"
-						if npp.Port != nil {
-							switch npp.Port.Type {
-							case intstr.Int:
-								port = string(npp.Port.IntVal)
-							case intstr.String:
-								port = npp.Port.StrVal
-							}
-						}
-
+					// Ports is present and contains at least one item, then this rule allows traffic
+					// only if the traffic matches at least one port in the ports list.
+					withProtoAndPort(ingressRule.Ports, func(proto, port string) {
 						rules = append(rules, newRule(&proto, srcSelector, dstSelector, &port))
-					}
+					})
 				}
 			}
 		}
 	}
 
 	return nsSelectors, podSelectors, rules, nil
+}
+
+func withProtoAndPort(npps []extensions.NetworkPolicyPort, f func(proto, port string)) {
+	for _, npp := range npps {
+		// If no proto is specified, default to TCP
+		proto := string(api.ProtocolTCP)
+		if npp.Protocol != nil {
+			proto = string(*npp.Protocol)
+		}
+
+		// If no port is specified, match any port. Let iptables executable handle
+		// service name resolution
+		port := "0:65535"
+		if npp.Port != nil {
+			switch npp.Port.Type {
+			case intstr.Int:
+				port = string(npp.Port.IntVal)
+			case intstr.String:
+				port = npp.Port.StrVal
+			}
+		}
+
+		f(proto, port)
+	}
 }
