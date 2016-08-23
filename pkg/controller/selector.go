@@ -9,6 +9,12 @@ import (
 	"k8s.io/kubernetes/pkg/types"
 )
 
+type selectorSet map[string]*selector
+
+func newSelectorSet() selectorSet {
+	return selectorSet(make(map[string]*selector))
+}
+
 type selector struct {
 	json     *unversioned.LabelSelector              // JSON representation
 	dom      labels.Selector                         // k8s domain object
@@ -62,24 +68,5 @@ func (s *selector) deprovision() error {
 
 	// TODO remove ipset
 
-	return nil
-}
-
-type selectorSet map[string]*selector
-
-func newSelectorSet() selectorSet {
-	return selectorSet(make(map[string]*selector))
-}
-
-func (ss selectorSet) dereference(policy *extensions.NetworkPolicy) error {
-	for key, selector := range ss {
-		delete(selector.policies, policy.ObjectMeta.UID)
-		if len(selector.policies) == 0 {
-			if err := selector.deprovision(); err != nil {
-				return err
-			}
-			delete(ss, key)
-		}
-	}
 	return nil
 }

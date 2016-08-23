@@ -4,9 +4,9 @@ import (
 	"k8s.io/kubernetes/pkg/apis/extensions"
 )
 
-func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors map[string]*selector, err error) {
-	nsSelectors = make(map[string]*selector)
-	podSelectors = make(map[string]*selector)
+func analysePolicy(policy *extensions.NetworkPolicy) (nsSelectors, podSelectors selectorSet, err error) {
+	nsSelectors = newSelectorSet()
+	podSelectors = newSelectorSet()
 
 	podSelector, err := newSelector(&policy.Spec.PodSelector)
 	if err != nil {

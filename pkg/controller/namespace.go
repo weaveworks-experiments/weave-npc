@@ -106,11 +106,11 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		if existingSelector, found := ns.nsSelectors[selectorKey]; found {
 			existingSelector.policies[obj.ObjectMeta.UID] = obj
 		} else {
-			selector.policies[obj.ObjectMeta.UID] = obj
-
 			if err := selector.provision(); err != nil {
 				return err
 			}
+
+			selector.policies[obj.ObjectMeta.UID] = obj
 
 			for _, otherNs := range ns.nss {
 				if otherNs.namespace != nil {
@@ -128,11 +128,11 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		if existingSelector, found := ns.podSelectors[selectorKey]; found {
 			existingSelector.policies[obj.ObjectMeta.UID] = obj
 		} else {
-			selector.policies[obj.ObjectMeta.UID] = obj
-
 			if err := selector.provision(); err != nil {
 				return err
 			}
+
+			selector.policies[obj.ObjectMeta.UID] = obj
 
 			for _, pod := range ns.pods {
 				if hasIP(pod) {
@@ -153,18 +153,118 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 	delete(ns.policies, oldObj.ObjectMeta.UID)
 	ns.policies[newObj.ObjectMeta.UID] = newObj
 
+	oldNsSelectors, oldPodSelectors, err := analysePolicy(oldObj)
+	if err != nil {
+		return err
+	}
+
+	newNsSelectors, newPodSelectors, err := analysePolicy(newObj)
+	if err != nil {
+		return err
+	}
+
+	{ // Handle namespace selector changes
+		for key, _ := range oldNsSelectors {
+			selector := ns.nsSelectors[key]
+			if _, found := newNsSelectors[key]; found {
+				delete(selector.policies, oldObj.ObjectMeta.UID)
+				selector.policies[newObj.ObjectMeta.UID] = newObj
+			} else {
+				delete(selector.policies, oldObj.ObjectMeta.UID)
+				if len(selector.policies) == 0 {
+					if err := selector.deprovision(); err != nil {
+						return err
+					}
+					delete(ns.nsSelectors, key)
+				}
+			}
+		}
+
+		for key, selector := range newNsSelectors {
+			if _, found := ns.nsSelectors[key]; !found {
+				if err := selector.provision(); err != nil {
+					return err
+				}
+
+				selector.policies[newObj.ObjectMeta.UID] = newObj
+
+				for _, otherNs := range ns.nss {
+					if otherNs.namespace != nil {
+						if selector.matches(otherNs.namespace.ObjectMeta.Labels) {
+							if err := selector.addEntry(otherNs.ipset.Name()); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
+
+		}
+	}
+
+	{ // Handle pod selector changes
+		for key, _ := range oldPodSelectors {
+			selector := ns.podSelectors[key]
+			if _, found := newPodSelectors[key]; found {
+				delete(selector.policies, oldObj.ObjectMeta.UID)
+				selector.policies[newObj.ObjectMeta.UID] = newObj
+			} else {
+				delete(selector.policies, oldObj.ObjectMeta.UID)
+				if len(selector.policies) == 0 {
+					if err := selector.deprovision(); err != nil {
+						return err
+					}
+					delete(ns.podSelectors, key)
+				}
+			}
+		}
+
+		for key, selector := range newPodSelectors {
+			if _, found := ns.podSelectors[key]; !found {
+				if err := selector.provision(); err != nil {
+					return err
+				}
+
+				selector.policies[newObj.ObjectMeta.UID] = newObj
+
+				for _, pod := range ns.pods {
+					if hasIP(pod) {
+						if selector.matches(pod.ObjectMeta.Labels) {
+							if err := selector.addEntry(pod.Status.PodIP); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
+
+		}
+	}
+
 	return nil
 }
 
 func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	delete(ns.policies, obj.ObjectMeta.UID)
 
-	if err := ns.podSelectors.dereference(obj); err != nil {
-		return err
+	for key, selector := range ns.podSelectors {
+		delete(selector.policies, obj.ObjectMeta.UID)
+		if len(selector.policies) == 0 {
+			if err := selector.deprovision(); err != nil {
+				return err
+			}
+			delete(ns.podSelectors, key)
+		}
 	}
 
-	if err := ns.nsSelectors.dereference(obj); err != nil {
-		return err
+	for key, selector := range ns.nsSelectors {
+		delete(selector.policies, obj.ObjectMeta.UID)
+		if len(selector.policies) == 0 {
+			if err := selector.deprovision(); err != nil {
+				return err
+			}
+			delete(ns.nsSelectors, key)
+		}
 	}
 
 	return nil
