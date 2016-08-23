@@ -23,7 +23,7 @@ func newNS(name string, nss map[string]*ns, nsSelectors selectorSet) *ns {
 		name:         name,
 		pods:         make(map[types.UID]*api.Pod),
 		policies:     make(map[types.UID]*extensions.NetworkPolicy),
-		ipset:        ipset.NewHashIP(encodeBase95("ns", name)),
+		ipset:        ipset.New(encodeBase95("ns", name), "hash:ip"),
 		podSelectors: newSelectorSet(),
 		nss:          nss,
 		nsSelectors:  nsSelectors}
@@ -257,7 +257,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 		}
 	}
 
-	// Take advantage of iptables behaviour to avoid reference counting rules
+	// Take advantage of iptables behaviour to avoid diffing/reference counting rules
 	for _, rule := range newRules {
 		if err := rule.provision(); err != nil {
 			return err

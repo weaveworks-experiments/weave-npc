@@ -11,7 +11,7 @@ func analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, nsSelectors
 	podSelectors = newSelectorSet()
 	rules = make([]*rule, 0)
 
-	dstSelector, err := newSelector(&policy.Spec.PodSelector)
+	dstSelector, err := newSelector(&policy.Spec.PodSelector, "hash:ip")
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -46,14 +46,14 @@ func analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, nsSelectors
 			for _, peer := range ingressRule.From {
 				var srcSelector *selector
 				if peer.PodSelector != nil {
-					srcSelector, err := newSelector(peer.PodSelector)
+					srcSelector, err := newSelector(peer.PodSelector, "hash:ip")
 					if err != nil {
 						return nil, nil, nil, err
 					}
 					podSelectors[srcSelector.str] = srcSelector
 				}
 				if peer.NamespaceSelector != nil {
-					srcSelector, err := newSelector(peer.NamespaceSelector)
+					srcSelector, err := newSelector(peer.NamespaceSelector, "list:set")
 					if err != nil {
 						return nil, nil, nil, err
 					}

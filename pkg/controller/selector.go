@@ -16,22 +16,24 @@ func newSelectorSet() selectorSet {
 }
 
 type selector struct {
-	json     *unversioned.LabelSelector              // JSON representation
-	dom      labels.Selector                         // k8s domain object
-	str      string                                  // string representation
-	policies map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
-	ipset    ipset.IPSet
+	json          *unversioned.LabelSelector              // JSON representation
+	dom           labels.Selector                         // k8s domain object
+	str           string                                  // string representation
+	policies      map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
+	ipsetTypeName string                                  // type of ipset to provision
+	ipset         ipset.IPSet
 }
 
-func newSelector(json *unversioned.LabelSelector) (*selector, error) {
+func newSelector(json *unversioned.LabelSelector, ipsetTypeName string) (*selector, error) {
 	dom, err := unversioned.LabelSelectorAsSelector(json)
 	if err != nil {
 		return nil, err
 	}
 	return &selector{
-		json: json,
-		dom:  dom,
-		str:  dom.String()}, nil
+		json:          json,
+		dom:           dom,
+		str:           dom.String(),
+		ipsetTypeName: ipsetTypeName}, nil
 }
 
 func (s *selector) matches(labelMap map[string]string) bool {
@@ -50,23 +52,26 @@ func (s *selector) provision() error {
 	if s.policies != nil {
 		return fmt.Errorf("Selector already provisioned: %s", s.str)
 	}
+
 	s.policies = make(map[types.UID]*extensions.NetworkPolicy)
+	s.ipset = ipset.New("", s.ipsetTypeName)
 
-	// TODO create ipset
-
-	return nil
+	return s.ipset.Create()
 }
 
 func (s *selector) deprovision() error {
 	if s.policies == nil {
 		return fmt.Errorf("Selector already deprovisioned: %s", s.str)
 	}
+
 	if len(s.policies) != 0 {
 		return fmt.Errorf("Cannot deprovision in-use selector: %s", s.str)
 	}
-	s.policies = nil
 
-	// TODO remove ipset
+	defer func() {
+		s.policies = nil
+		s.ipset = nil
+	}()
 
-	return nil
+	return s.ipset.Destroy()
 }
