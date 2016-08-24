@@ -417,6 +417,7 @@ func (ns *ns) delFromMatching(obj *api.Pod) error {
 }
 
 func hasIP(pod *api.Pod) bool {
+	// Ensure pod has an IP address and isn't sharing the host network namespace
 	return len(pod.Status.PodIP) > 0 && !(pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.HostNetwork)
 }
 

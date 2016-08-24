@@ -10,10 +10,17 @@ import (
 	"k8s.io/kubernetes/pkg/controller/framework"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/runtime"
-	"k8s.io/kubernetes/pkg/util/wait"
+	utildbus "k8s.io/kubernetes/pkg/util/dbus"
+	utilexec "k8s.io/kubernetes/pkg/util/exec"
+	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
+	utilwait "k8s.io/kubernetes/pkg/util/wait"
 	"log"
 	"os/exec"
 	"time"
+)
+
+const (
+	WeaveChain = utiliptables.Chain("WEAVE-NPC")
 )
 
 func handleError(err error) {
@@ -46,7 +53,18 @@ func resetIPTables() error {
 		}
 	}
 
-	// TODO flush WEAVE chains
+	ipt := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
+
+	needFlush, err := ipt.EnsureChain(utiliptables.TableFilter, WeaveChain)
+	if err != nil {
+		return err
+	}
+
+	if needFlush {
+		if err := ipt.FlushChain(utiliptables.TableFilter, WeaveChain); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -98,9 +116,9 @@ func main() {
 				handleError(npc.UpdateNetworkPolicy(old.(*extensions.NetworkPolicy), new.(*extensions.NetworkPolicy)))
 			}})
 
-	go nsController.Run(wait.NeverStop)
-	go podController.Run(wait.NeverStop)
-	go npController.Run(wait.NeverStop)
+	go nsController.Run(utilwait.NeverStop)
+	go podController.Run(utilwait.NeverStop)
+	go npController.Run(utilwait.NeverStop)
 
 	// TODO wait for signal here
 	time.Sleep(time.Minute * 5)
