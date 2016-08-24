@@ -4,6 +4,7 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
+	"k8s.io/kubernetes/pkg/util/iptables"
 	"sync"
 )
 
@@ -24,12 +25,14 @@ type NetworkPolicyController interface {
 type controller struct {
 	sync.Mutex
 
+	ipt         iptables.Interface
 	nss         map[string]*ns // ns name -> ns struct
 	nsSelectors selectorSet    // selector string -> nsSelector
 }
 
-func New() NetworkPolicyController {
+func New(ipt iptables.Interface) NetworkPolicyController {
 	return &controller{
+		ipt:         ipt,
 		nss:         make(map[string]*ns),
 		nsSelectors: newSelectorSet()}
 }
@@ -37,7 +40,7 @@ func New() NetworkPolicyController {
 func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 	ns, found := npc.nss[name]
 	if !found {
-		newNs, err := newNS(name, npc.nss, npc.nsSelectors)
+		newNs, err := newNS(name, npc.ipt, npc.nss, npc.nsSelectors)
 		if err != nil {
 			return err
 		}

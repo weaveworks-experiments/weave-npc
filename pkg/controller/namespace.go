@@ -6,9 +6,12 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/types"
+	"k8s.io/kubernetes/pkg/util/iptables"
 )
 
 type ns struct {
+	ipt iptables.Interface
+
 	name         string
 	namespace    *api.Namespace
 	pods         map[types.UID]*api.Pod                  // pod UID -> k8s Pods
@@ -19,12 +22,13 @@ type ns struct {
 	nsSelectors  selectorSet                             // selector string -> nsSelector
 }
 
-func newNS(name string, nss map[string]*ns, nsSelectors selectorSet) (*ns, error) {
+func newNS(name string, ipt iptables.Interface, nss map[string]*ns, nsSelectors selectorSet) (*ns, error) {
 	ipset := ipset.New("weave-"+shortName(name), "hash:ip")
 	if err := ipset.Create(); err != nil {
 		return nil, err
 	}
 	return &ns{
+		ipt:          ipt,
 		name:         name,
 		pods:         make(map[types.UID]*api.Pod),
 		policies:     make(map[types.UID]*extensions.NetworkPolicy),
@@ -160,7 +164,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 
 	// No need to reference count rules - iptables permits duplicates
 	for _, rule := range rules {
-		if err := rule.provision(); err != nil {
+		if err := rule.provision(ns.ipt); err != nil {
 			return err
 		}
 	}
@@ -271,12 +275,12 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 
 	// Take advantage of iptables behaviour to avoid diffing/reference counting rules
 	for _, rule := range newRules {
-		if err := rule.provision(); err != nil {
+		if err := rule.provision(ns.ipt); err != nil {
 			return err
 		}
 	}
 	for _, rule := range oldRules {
-		if err := rule.deprovision(); err != nil {
+		if err := rule.deprovision(ns.ipt); err != nil {
 			return err
 		}
 	}
@@ -287,7 +291,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	delete(ns.policies, obj.ObjectMeta.UID)
 
-	// Analyse the old and the new policy so we can determine differences
+	// Analyse the network policy to free resources
 	rules, nsSelectors, podSelectors, err := ns.analysePolicy(obj)
 	if err != nil {
 		return err
@@ -296,7 +300,7 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	// Remove rules first, so that ipsets are freed. No need to reference count
 	// rules - iptables deletion removes duplicated rules one at a time
 	for _, rule := range rules {
-		if err := rule.deprovision(); err != nil {
+		if err := rule.deprovision(ns.ipt); err != nil {
 			return err
 		}
 	}

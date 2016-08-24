@@ -36,7 +36,7 @@ func makeController(getter cache.Getter, resource string,
 	return controller
 }
 
-func resetIPTables() error {
+func resetIPTables(ipt utiliptables.Interface) error {
 	// TODO should only destroy things with `weave-` prefix here
 	if err := exec.Command("ipset", "flush").Run(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -52,8 +52,6 @@ func resetIPTables() error {
 			return errors.Wrapf(err, "ipset destroy failed")
 		}
 	}
-
-	ipt := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
 
 	needFlush, err := ipt.EnsureChain(utiliptables.TableFilter, WeaveChain)
 	if err != nil {
@@ -76,9 +74,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	handleError(resetIPTables())
+	ipt := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
 
-	npc := weavenpc.New()
+	handleError(resetIPTables(ipt))
+
+	npc := weavenpc.New(ipt)
 
 	nsController := makeController(client, "namespaces", &api.Namespace{},
 		framework.ResourceEventHandlerFuncs{
