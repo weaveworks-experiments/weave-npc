@@ -128,6 +128,8 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 					}
 				}
 			}
+
+			ns.nsSelectors[selectorKey] = selector
 		}
 	}
 
@@ -151,6 +153,8 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 					}
 				}
 			}
+
+			ns.podSelectors[selectorKey] = selector
 		}
 	}
 
@@ -215,6 +219,8 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 						}
 					}
 				}
+
+				ns.nsSelectors[key] = selector
 			}
 
 		}
@@ -257,8 +263,9 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 						}
 					}
 				}
-			}
 
+				ns.podSelectors[key] = selector
+			}
 		}
 	}
 
@@ -406,7 +413,7 @@ func (ns *ns) delFromMatching(obj *api.Pod) error {
 }
 
 func hasIP(pod *api.Pod) bool {
-	return len(pod.Status.PodIP) > 0
+	return len(pod.Status.PodIP) > 0 && !(pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.HostNetwork)
 }
 
 func equals(a, b map[string]string) bool {

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/pkg/errors"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"sync"
@@ -57,7 +58,7 @@ func (npc *controller) AddPod(obj *api.Pod) error {
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.addPod(obj)
+		return errors.Wrap(ns.addPod(obj), "add pod")
 	})
 }
 
@@ -66,7 +67,7 @@ func (npc *controller) UpdatePod(oldObj, newObj *api.Pod) error {
 	defer npc.Unlock()
 
 	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.updatePod(oldObj, newObj)
+		return errors.Wrap(ns.updatePod(oldObj, newObj), "update pod")
 	})
 }
 
@@ -75,7 +76,7 @@ func (npc *controller) DeletePod(obj *api.Pod) error {
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.deletePod(obj)
+		return errors.Wrap(ns.deletePod(obj), "delete pod")
 	})
 }
 
@@ -84,7 +85,7 @@ func (npc *controller) AddNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.addNetworkPolicy(obj)
+		return errors.Wrap(ns.addNetworkPolicy(obj), "add network policy")
 	})
 }
 
@@ -93,7 +94,7 @@ func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPol
 	defer npc.Unlock()
 
 	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.updateNetworkPolicy(oldObj, newObj)
+		return errors.Wrap(ns.updateNetworkPolicy(oldObj, newObj), "update network policy")
 	})
 }
 
@@ -102,7 +103,7 @@ func (npc *controller) DeleteNetworkPolicy(obj *extensions.NetworkPolicy) error 
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Namespace, func(ns *ns) error {
-		return ns.deleteNetworkPolicy(obj)
+		return errors.Wrap(ns.deleteNetworkPolicy(obj), "delete network policy")
 	})
 }
 
@@ -111,7 +112,7 @@ func (npc *controller) AddNamespace(obj *api.Namespace) error {
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Name, func(ns *ns) error {
-		return ns.addNamespace(obj)
+		return errors.Wrap(ns.addNamespace(obj), "add namespace")
 	})
 }
 
@@ -120,7 +121,7 @@ func (npc *controller) UpdateNamespace(oldObj, newObj *api.Namespace) error {
 	defer npc.Unlock()
 
 	return npc.withNS(oldObj.ObjectMeta.Name, func(ns *ns) error {
-		return ns.updateNamespace(oldObj, newObj)
+		return errors.Wrap(ns.updateNamespace(oldObj, newObj), "update namespace")
 	})
 }
 
@@ -129,6 +130,6 @@ func (npc *controller) DeleteNamespace(obj *api.Namespace) error {
 	defer npc.Unlock()
 
 	return npc.withNS(obj.ObjectMeta.Name, func(ns *ns) error {
-		return ns.deleteNamespace(obj)
+		return errors.Wrap(ns.deleteNamespace(obj), "delete namespace")
 	})
 }
