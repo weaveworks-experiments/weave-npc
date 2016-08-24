@@ -20,7 +20,7 @@ type ns struct {
 }
 
 func newNS(name string, nss map[string]*ns, nsSelectors selectorSet) (*ns, error) {
-	ipset := ipset.New(shortName(name), "hash:ip")
+	ipset := ipset.New("weave-"+shortName(name), "hash:ip")
 	if err := ipset.Create(); err != nil {
 		return nil, err
 	}
@@ -301,25 +301,29 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		}
 	}
 
-	// Deprovision pod selector ipsets that are no longer in use
-	for key, selector := range podSelectors {
-		delete(selector.policies, obj.ObjectMeta.UID)
-		if len(selector.policies) == 0 {
-			if err := selector.deprovision(); err != nil {
-				return err
+	// Deprovision namespace selector ipsets that are no longer in use
+	for key, _ := range nsSelectors {
+		if selector, found := ns.nsSelectors[key]; found {
+			delete(selector.policies, obj.ObjectMeta.UID)
+			if len(selector.policies) == 0 {
+				if err := selector.deprovision(); err != nil {
+					return err
+				}
+				delete(ns.nsSelectors, key)
 			}
-			delete(ns.podSelectors, key)
 		}
 	}
 
-	// Deprovision namespace selector ipsets that are no longer in use
-	for key, selector := range nsSelectors {
-		delete(selector.policies, obj.ObjectMeta.UID)
-		if len(selector.policies) == 0 {
-			if err := selector.deprovision(); err != nil {
-				return err
+	// Deprovision pod selector ipsets that are no longer in use
+	for key, _ := range podSelectors {
+		if selector, found := ns.podSelectors[key]; found {
+			delete(selector.policies, obj.ObjectMeta.UID)
+			if len(selector.policies) == 0 {
+				if err := selector.deprovision(); err != nil {
+					return err
+				}
+				delete(ns.podSelectors, key)
 			}
-			delete(ns.nsSelectors, key)
 		}
 	}
 

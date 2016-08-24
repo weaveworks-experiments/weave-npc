@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/pkg/errors"
 	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/util/wait"
 	"log"
+	"os/exec"
 	"time"
 )
 
@@ -28,7 +30,24 @@ func makeController(getter cache.Getter, resource string,
 }
 
 func resetIPTables() error {
-	// TODO
+	// TODO should only destroy things with `weave-` prefix here
+	if err := exec.Command("ipset", "flush").Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return errors.Wrapf(err, "ipset flush failed: %s", ee.Stderr)
+		} else {
+			return errors.Wrapf(err, "ipset flush ailed")
+		}
+	}
+	if err := exec.Command("ipset", "destroy").Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return errors.Wrapf(err, "ipset destroy failed: %s", ee.Stderr)
+		} else {
+			return errors.Wrapf(err, "ipset destroy failed")
+		}
+	}
+
+	// TODO flush WEAVE chains
+
 	return nil
 }
 
@@ -83,6 +102,7 @@ func main() {
 	go podController.Run(wait.NeverStop)
 	go npController.Run(wait.NeverStop)
 
+	// TODO wait for signal here
 	time.Sleep(time.Minute * 5)
 
 }
