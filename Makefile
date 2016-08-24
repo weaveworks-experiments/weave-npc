@@ -19,7 +19,7 @@ build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc
 	mkdir -p build
 	cp $^ build
 	sudo docker build -t harrisonadamw/weave-npc -f build/Dockerfile ./build
-	sudo docker push harrisonadamw/weave-npc
+	sudo docker save harrisonadamw/weave-npc | (eval $$(minikube docker-env) && docker load)
 	touch $@
 
 deploy: all

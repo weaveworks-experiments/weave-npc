@@ -18,6 +18,6 @@ spec:
       containers:
       - name: weave-npc
         image: harrisonadamw/weave-npc
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
