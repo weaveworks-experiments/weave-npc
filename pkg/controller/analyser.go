@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/intstr"
@@ -46,14 +47,14 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, ns
 			for _, peer := range ingressRule.From {
 				var srcSelector *selector
 				if peer.PodSelector != nil {
-					srcSelector, err := newSelector(peer.PodSelector, "hash:ip")
+					srcSelector, err = newSelector(peer.PodSelector, "hash:ip")
 					if err != nil {
 						return nil, nil, nil, err
 					}
 					podSelectors[srcSelector.str] = srcSelector
 				}
 				if peer.NamespaceSelector != nil {
-					srcSelector, err := newSelector(peer.NamespaceSelector, "list:set")
+					srcSelector, err = newSelector(peer.NamespaceSelector, "list:set")
 					if err != nil {
 						return nil, nil, nil, err
 					}
@@ -91,7 +92,7 @@ func withNormalisedProtoAndPort(npps []extensions.NetworkPolicyPort, f func(prot
 		if npp.Port != nil {
 			switch npp.Port.Type {
 			case intstr.Int:
-				port = string(npp.Port.IntVal)
+				port = fmt.Sprintf("%d", npp.Port.IntVal)
 			case intstr.String:
 				port = npp.Port.StrVal
 			}

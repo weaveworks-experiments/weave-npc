@@ -37,22 +37,7 @@ func makeController(getter cache.Getter, resource string,
 }
 
 func resetIPTables(ipt utiliptables.Interface) error {
-	// TODO should only destroy things with `weave-` prefix here
-	if err := exec.Command("ipset", "flush").Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return errors.Wrapf(err, "ipset flush failed: %s", ee.Stderr)
-		} else {
-			return errors.Wrapf(err, "ipset flush ailed")
-		}
-	}
-	if err := exec.Command("ipset", "destroy").Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return errors.Wrapf(err, "ipset destroy failed: %s", ee.Stderr)
-		} else {
-			return errors.Wrapf(err, "ipset destroy failed")
-		}
-	}
-
+	// Flush the chain first so there are no refs to the ipsets
 	needFlush, err := ipt.EnsureChain(utiliptables.TableFilter, WeaveChain)
 	if err != nil {
 		return err
@@ -61,6 +46,26 @@ func resetIPTables(ipt utiliptables.Interface) error {
 	if needFlush {
 		if err := ipt.FlushChain(utiliptables.TableFilter, WeaveChain); err != nil {
 			return err
+		}
+	}
+
+	// TODO should restrict ipset operations to the `weave-` prefix:
+
+	// Now flush the ipsets to clear out list:set interdependencies
+	if err := exec.Command("ipset", "flush").Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return errors.Wrapf(err, "ipset flush failed: %s", ee.Stderr)
+		} else {
+			return errors.Wrapf(err, "ipset flush ailed")
+		}
+	}
+
+	// Finally destroy the ipsets
+	if err := exec.Command("ipset", "destroy").Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return errors.Wrapf(err, "ipset destroy failed: %s", ee.Stderr)
+		} else {
+			return errors.Wrapf(err, "ipset destroy failed")
 		}
 	}
 
