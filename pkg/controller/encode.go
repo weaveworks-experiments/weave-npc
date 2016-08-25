@@ -10,7 +10,7 @@ import (
 func shortName(arbitrary string) string {
 	// This array:
 	// * Must only include ASCII characters
-	// * Must be at least of length 85 (`len("weave-") + l(2^160)/l(85)` equals 31, the maximum ipset name length
+	// * Must be at least of length 85 (`len("weave-") + l(2^160)/l(85)` equals 31, the maximum ipset name length)
 	// * Must not include commas as those are treated specially by `ipset add` when adding a set name to a list:set
 	// * Should not include space for readability
 	// * Should not include single quote or backslash to be nice to shell users

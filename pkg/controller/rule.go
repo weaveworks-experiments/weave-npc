@@ -42,5 +42,5 @@ func (r *rule) args() []string {
 	if r.dstPort != nil {
 		args = append(args, "--dport", *r.dstPort)
 	}
-	return append(args, "-j", "ACCEPT")
+	return append(args, "-m", "state", "--state", "NEW", "-j", "ACCEPT")
 }
