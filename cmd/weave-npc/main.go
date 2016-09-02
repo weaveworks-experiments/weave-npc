@@ -56,7 +56,7 @@ func resetIPTables(ipt utiliptables.Interface) error {
 		if ee, ok := err.(*exec.ExitError); ok {
 			return errors.Wrapf(err, "ipset flush failed: %s", ee.Stderr)
 		} else {
-			return errors.Wrapf(err, "ipset flush ailed")
+			return errors.Wrapf(err, "ipset flush failed")
 		}
 	}
 

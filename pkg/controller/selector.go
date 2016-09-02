@@ -21,12 +21,12 @@ type selector struct {
 	str  string                     // string representation
 
 	policies      map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
-	namespaceName string                                  // for namespace scoped pod selectors
+	nsName        string                                  // for namespace scoped pod selectors
 	ipsetTypeName string                                  // type of ipset to provision
 	ipset         ipset.IPSet
 }
 
-func newSelector(json *unversioned.LabelSelector, ipsetName, ipsetTypeName string) (*selector, error) {
+func newSelector(json *unversioned.LabelSelector, nsName, ipsetTypeName string) (*selector, error) {
 	dom, err := unversioned.LabelSelectorAsSelector(json)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func newSelector(json *unversioned.LabelSelector, ipsetName, ipsetTypeName strin
 		json:          json,
 		dom:           dom,
 		str:           dom.String(),
-		ipsetName:     ipsetName,
+		nsName:        nsName,
 		ipsetTypeName: ipsetTypeName}, nil
 }
 
@@ -57,8 +57,11 @@ func (s *selector) provision() error {
 	}
 
 	s.policies = make(map[types.UID]*extensions.NetworkPolicy)
-	// TODO needs to be prefixed with namespace name for pod selectors!
-	s.ipset = ipset.New("weave-"+shortName(s.str), s.ipsetTypeName)
+
+	// We prefix the selector string with the namespace name when generating
+	// the shortname because you can specify the same selector in multiple
+	// namespaces - we need those to map to distinct ipsets
+	s.ipset = ipset.New("weave-"+shortName(s.nsName+":"+s.str), s.ipsetTypeName)
 
 	return s.ipset.Create()
 }
