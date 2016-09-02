@@ -16,15 +16,17 @@ func newSelectorSet() selectorSet {
 }
 
 type selector struct {
-	json          *unversioned.LabelSelector              // JSON representation
-	dom           labels.Selector                         // k8s domain object
-	str           string                                  // string representation
+	json *unversioned.LabelSelector // JSON representation
+	dom  labels.Selector            // k8s domain object
+	str  string                     // string representation
+
 	policies      map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
+	namespaceName string                                  // for namespace scoped pod selectors
 	ipsetTypeName string                                  // type of ipset to provision
 	ipset         ipset.IPSet
 }
 
-func newSelector(json *unversioned.LabelSelector, ipsetTypeName string) (*selector, error) {
+func newSelector(json *unversioned.LabelSelector, ipsetName, ipsetTypeName string) (*selector, error) {
 	dom, err := unversioned.LabelSelectorAsSelector(json)
 	if err != nil {
 		return nil, err
@@ -33,6 +35,7 @@ func newSelector(json *unversioned.LabelSelector, ipsetTypeName string) (*select
 		json:          json,
 		dom:           dom,
 		str:           dom.String(),
+		ipsetName:     ipsetName,
 		ipsetTypeName: ipsetTypeName}, nil
 }
 
