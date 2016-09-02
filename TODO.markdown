@@ -9,3 +9,4 @@
 * Allow 'local' access for healthchecks - mark 'local' traffic in some
   way outside of the policy controller (e.g. have `weave expose` add a
   marking rule)
+* Extract ExitError machinery
