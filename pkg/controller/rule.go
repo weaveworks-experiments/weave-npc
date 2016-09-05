@@ -36,10 +36,10 @@ func (r *rule) args() []string {
 		args = append(args, "-p", *r.proto)
 	}
 	if r.srcHost != nil {
-		args = append(args, "-m", "set", "--match-set", r.srcHost.ipset.Name(), "src")
+		args = append(args, "-m", "set", "--match-set", r.srcHost.ipsetName, "src")
 	}
 	if r.dstHost != nil {
-		args = append(args, "-m", "set", "--match-set", r.dstHost.ipset.Name(), "dst")
+		args = append(args, "-m", "set", "--match-set", r.dstHost.ipsetName, "dst")
 	}
 	if r.dstPort != nil {
 		args = append(args, "--dport", *r.dstPort)

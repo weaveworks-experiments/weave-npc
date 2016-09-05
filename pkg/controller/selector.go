@@ -16,14 +16,14 @@ func newSelectorSet() selectorSet {
 }
 
 type selector struct {
-	json *unversioned.LabelSelector // JSON representation
-	dom  labels.Selector            // k8s domain object
-	str  string                     // string representation
+	json      *unversioned.LabelSelector // JSON representation (from API server)
+	ipsetType ipset.Type                 // type of ipset to provision
 
+	dom       labels.Selector                         // k8s domain object (for matching)
+	str       string                                  // string representation (for hash keying/equality comparison)
 	policies  map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
-	nsName    string                                  // for namespace scoped pod selectors
-	ipsetType ipset.Type                              // type of ipset to provision
-	ipset     ipset.Interface
+	ipsetName string                                  // generated ipset name
+	ipset     ipset.Interface                         // concrete ipset
 }
 
 func newSelector(json *unversioned.LabelSelector, nsName string, ipsetType ipset.Type) (*selector, error) {
@@ -31,12 +31,16 @@ func newSelector(json *unversioned.LabelSelector, nsName string, ipsetType ipset
 	if err != nil {
 		return nil, err
 	}
+	str := dom.String()
 	return &selector{
 		json:      json,
+		ipsetType: ipsetType,
 		dom:       dom,
-		str:       dom.String(),
-		nsName:    nsName,
-		ipsetType: ipsetType}, nil
+		str:       str,
+		// We prefix the selector string with the namespace name when generating
+		// the shortname because you can specify the same selector in multiple
+		// namespaces - we need those to map to distinct ipsets
+		ipsetName: "weave-" + shortName(nsName+":"+str)}, nil
 }
 
 func (s *selector) matches(labelMap map[string]string) bool {
@@ -57,11 +61,7 @@ func (s *selector) provision() error {
 	}
 
 	s.policies = make(map[types.UID]*extensions.NetworkPolicy)
-
-	// We prefix the selector string with the namespace name when generating
-	// the shortname because you can specify the same selector in multiple
-	// namespaces - we need those to map to distinct ipsets
-	s.ipset = ipset.New("weave-"+shortName(s.nsName+":"+s.str), s.ipsetType)
+	s.ipset = ipset.New(s.ipsetName, s.ipsetType)
 
 	return s.ipset.Create()
 }
