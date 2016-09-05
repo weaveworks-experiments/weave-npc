@@ -19,10 +19,6 @@ import (
 	"time"
 )
 
-const (
-	WeaveChain = utiliptables.Chain("WEAVE-NPC")
-)
-
 func handleError(err error) {
 	if err != nil {
 		log.Fatal(err)
@@ -36,17 +32,53 @@ func makeController(getter cache.Getter, resource string,
 	return controller
 }
 
-func resetIPTables(ipt utiliptables.Interface) error {
-	// Flush the chain first so there are no refs to the ipsets
-	needFlush, err := ipt.EnsureChain(utiliptables.TableFilter, WeaveChain)
+func ensureFlushedChain(ipt utiliptables.Interface, chain utiliptables.Chain) error {
+	needFlush, err := ipt.EnsureChain(utiliptables.TableFilter, chain)
 	if err != nil {
 		return err
 	}
 
 	if needFlush {
-		if err := ipt.FlushChain(utiliptables.TableFilter, WeaveChain); err != nil {
+		if err := ipt.FlushChain(utiliptables.TableFilter, chain); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func resetIPTables(ipt utiliptables.Interface) error {
+	// Flush chains first so there are no refs to extant ipsets
+	if err := ensureFlushedChain(ipt, weavenpc.IngressChain); err != nil {
+		return err
+	}
+
+	if err := ensureFlushedChain(ipt, weavenpc.DefaultChain); err != nil {
+		return err
+	}
+
+	if err := ensureFlushedChain(ipt, weavenpc.MainChain); err != nil {
+		return err
+	}
+
+	// Configure main chain static rules
+	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+		"-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"); err != nil {
+		return err
+	}
+
+	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+		"-m", "state", "--state", "NEW", "-j", "WEAVE-NPC-DEFAULT"); err != nil {
+		return err
+	}
+
+	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+		"-m", "state", "--state", "NEW", "-j", "WEAVE-NPC-INGRESS"); err != nil {
+		return err
+	}
+
+	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+		"-j", "DROP"); err != nil {
+		return err
 	}
 
 	// TODO should restrict ipset operations to the `weave-` prefix:

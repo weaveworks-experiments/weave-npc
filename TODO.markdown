@@ -10,3 +10,4 @@
   way outside of the policy controller (e.g. have `weave expose` add a
   marking rule)
 * Extract ExitError machinery
+* Conntrack flushing on rule change

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"github.com/pkg/errors"
 	"github.com/weaveworks/weave-npc/pkg/ipset"
 	"k8s.io/kubernetes/pkg/api"
@@ -435,4 +436,20 @@ func equals(a, b map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func isDefaultDeny(namespace *api.Namespace) bool {
+	nnpJson, found := namespace.ObjectMeta.Annotations["net.beta.kubernetes.io/network-policy"]
+	if !found {
+		return false
+	}
+
+	var nnp NamespaceNetworkPolicy
+	if err := json.Unmarshal([]byte(nnpJson), &nnp); err != nil {
+		// If we can't understand the annotation, behave as if it isn't present
+		// TODO log unmarshal failure
+		return false
+	}
+
+	return nnp.Ingress != nil && nnp.Ingress.Isolation != nil && *(nnp.Ingress.Isolation) == DefaultDeny
 }

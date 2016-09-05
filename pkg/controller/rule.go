@@ -5,7 +5,9 @@ import (
 )
 
 const (
-	WeaveChain = iptables.Chain("WEAVE-NPC")
+	MainChain    = iptables.Chain("WEAVE-NPC")
+	DefaultChain = iptables.Chain("WEAVE-NPC-DEFAULT")
+	IngressChain = iptables.Chain("WEAVE-NPC-INGRESS")
 )
 
 type rule struct {
@@ -20,12 +22,12 @@ func newRule(proto *string, srcHost *selector, dstHost *selector, dstPort *strin
 }
 
 func (r *rule) provision(ipt iptables.Interface) error {
-	_, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, WeaveChain, r.args()...)
+	_, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, IngressChain, r.args()...)
 	return err
 }
 
 func (r *rule) deprovision(ipt iptables.Interface) error {
-	return ipt.DeleteRule(iptables.TableFilter, WeaveChain, r.args()...)
+	return ipt.DeleteRule(iptables.TableFilter, IngressChain, r.args()...)
 }
 
 func (r *rule) args() []string {
