@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"github.com/weaveworks/weave-npc/pkg/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/intstr"
@@ -12,7 +13,7 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, ns
 	podSelectors = newSelectorSet()
 	rules = make([]*rule, 0)
 
-	dstSelector, err := newSelector(&policy.Spec.PodSelector, ns.name, "hash:ip")
+	dstSelector, err := newSelector(&policy.Spec.PodSelector, ns.name, ipset.HashIP)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -54,7 +55,7 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, ns
 					podSelectors[srcSelector.str] = srcSelector
 				}
 				if peer.NamespaceSelector != nil {
-					srcSelector, err = newSelector(peer.NamespaceSelector, "", "list:set")
+					srcSelector, err = newSelector(peer.NamespaceSelector, "", ipset.ListSet)
 					if err != nil {
 						return nil, nil, nil, err
 					}

@@ -5,7 +5,14 @@ import (
 	"os/exec"
 )
 
-type IPSet interface {
+type Type string
+
+const (
+	ListSet = Type("list:set")
+	HashIP  = Type("hash:ip")
+)
+
+type Interface interface {
 	Name() string
 	Create() error
 	AddEntry(entry string) error
@@ -14,29 +21,25 @@ type IPSet interface {
 }
 
 type ipset struct {
-	name     string
-	typeName string
-	entries  map[string]struct{}
+	name      string
+	ipsetType Type
+	entries   map[string]struct{}
 }
 
-func New(name, typeName string) IPSet {
-	return &ipset{name, typeName, make(map[string]struct{})}
+func New(name string, ipsetType Type) Interface {
+	return &ipset{name, ipsetType, make(map[string]struct{})}
 }
 
 func (i *ipset) Name() string {
 	return i.name
 }
 
-func (i *ipset) TypeName() string {
-	return i.typeName
-}
-
 func (i *ipset) Create() error {
-	if _, err := exec.Command("ipset", "create", i.name, i.typeName).Output(); err != nil {
+	if _, err := exec.Command("ipset", "create", i.name, string(i.ipsetType)).Output(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
-			return errors.Wrapf(err, "ipset create %s %s failed: %s", i.name, i.typeName, ee.Stderr)
+			return errors.Wrapf(err, "ipset create %s %s failed: %s", i.name, string(i.ipsetType), ee.Stderr)
 		} else {
-			return errors.Wrapf(err, "ipset create %s %s failed", i.name, i.typeName)
+			return errors.Wrapf(err, "ipset create %s %s failed", i.name, string(i.ipsetType))
 		}
 	}
 	return nil

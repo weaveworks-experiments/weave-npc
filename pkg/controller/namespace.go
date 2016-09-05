@@ -17,7 +17,7 @@ type ns struct {
 	namespace    *api.Namespace
 	pods         map[types.UID]*api.Pod                  // pod UID -> k8s Pods
 	policies     map[types.UID]*extensions.NetworkPolicy // policy UID -> k8s NetworkPolicy
-	ipset        ipset.IPSet                             // hash:ip ipset of pod IPs in this namespace
+	ipset        ipset.Interface                         // hash:ip ipset of pod IPs in this namespace
 	podSelectors selectorSet                             // selector string -> podSelector
 	nss          map[string]*ns                          // ns name -> ns struct
 	nsSelectors  selectorSet                             // selector string -> nsSelector
@@ -461,7 +461,9 @@ func (ns *ns) delFromMatching(obj *api.Pod) error {
 
 func hasIP(pod *api.Pod) bool {
 	// Ensure pod has an IP address and isn't sharing the host network namespace
-	return len(pod.Status.PodIP) > 0 && !(pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.HostNetwork)
+	return len(pod.Status.PodIP) > 0 &&
+		!(pod.Spec.SecurityContext != nil &&
+			pod.Spec.SecurityContext.HostNetwork)
 }
 
 func equals(a, b map[string]string) bool {
@@ -489,5 +491,7 @@ func isDefaultDeny(namespace *api.Namespace) bool {
 		return false
 	}
 
-	return nnp.Ingress != nil && nnp.Ingress.Isolation != nil && *(nnp.Ingress.Isolation) == DefaultDeny
+	return nnp.Ingress != nil &&
+		nnp.Ingress.Isolation != nil &&
+		*(nnp.Ingress.Isolation) == DefaultDeny
 }

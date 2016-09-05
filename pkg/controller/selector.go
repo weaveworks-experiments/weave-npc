@@ -20,23 +20,23 @@ type selector struct {
 	dom  labels.Selector            // k8s domain object
 	str  string                     // string representation
 
-	policies      map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
-	nsName        string                                  // for namespace scoped pod selectors
-	ipsetTypeName string                                  // type of ipset to provision
-	ipset         ipset.IPSet
+	policies  map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
+	nsName    string                                  // for namespace scoped pod selectors
+	ipsetType ipset.Type                              // type of ipset to provision
+	ipset     ipset.Interface
 }
 
-func newSelector(json *unversioned.LabelSelector, nsName, ipsetTypeName string) (*selector, error) {
+func newSelector(json *unversioned.LabelSelector, nsName string, ipsetType ipset.Type) (*selector, error) {
 	dom, err := unversioned.LabelSelectorAsSelector(json)
 	if err != nil {
 		return nil, err
 	}
 	return &selector{
-		json:          json,
-		dom:           dom,
-		str:           dom.String(),
-		nsName:        nsName,
-		ipsetTypeName: ipsetTypeName}, nil
+		json:      json,
+		dom:       dom,
+		str:       dom.String(),
+		nsName:    nsName,
+		ipsetType: ipsetType}, nil
 }
 
 func (s *selector) matches(labelMap map[string]string) bool {
@@ -61,7 +61,7 @@ func (s *selector) provision() error {
 	// We prefix the selector string with the namespace name when generating
 	// the shortname because you can specify the same selector in multiple
 	// namespaces - we need those to map to distinct ipsets
-	s.ipset = ipset.New("weave-"+shortName(s.nsName+":"+s.str), s.ipsetTypeName)
+	s.ipset = ipset.New("weave-"+shortName(s.nsName+":"+s.str), s.ipsetType)
 
 	return s.ipset.Create()
 }
