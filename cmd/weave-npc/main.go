@@ -15,8 +15,10 @@ import (
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
 	utilwait "k8s.io/kubernetes/pkg/util/wait"
 	"log"
+	"os"
 	"os/exec"
-	"time"
+	"os/signal"
+	"syscall"
 )
 
 func handleError(err error) {
@@ -157,7 +159,7 @@ func main() {
 	go podController.Run(utilwait.NeverStop)
 	go npController.Run(utilwait.NeverStop)
 
-	// TODO wait for signal here
-	time.Sleep(time.Minute * 5)
-
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	log.Fatal(<-signals)
 }

@@ -338,6 +338,15 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 func (ns *ns) addNamespace(obj *api.Namespace) error {
 	ns.namespace = obj
 
+	// Insert a rule to bypass policies if namespace is DefaultAllow
+	if !isDefaultDeny(obj) {
+		if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain,
+			"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+			return err
+		}
+	}
+
+	// Add namespace ipset to matching namespace selectors
 	for _, nss := range ns.nsSelectors {
 		if nss.matches(obj.ObjectMeta.Labels) {
 			if err := nss.addEntry(ns.ipset.Name()); err != nil {
@@ -352,6 +361,26 @@ func (ns *ns) addNamespace(obj *api.Namespace) error {
 func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 	ns.namespace = newObj
 
+	// Update bypass rule if ingress default has changed
+	oldDefaultDeny := isDefaultDeny(oldObj)
+	newDefaultDeny := isDefaultDeny(newObj)
+
+	if oldDefaultDeny != newDefaultDeny {
+		if oldDefaultDeny {
+			if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain,
+				"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+				return err
+			}
+		}
+		if newDefaultDeny {
+			if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain,
+				"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Re-evaluate namespace selector membership if labels have changed
 	if !equals(oldObj.ObjectMeta.Labels, newObj.ObjectMeta.Labels) {
 		for _, nss := range ns.nsSelectors {
 			oldMatch := nss.matches(oldObj.ObjectMeta.Labels)
@@ -378,11 +407,20 @@ func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 	ns.namespace = nil
 
+	// Remove namespace ipset from any matching namespace selectors
 	for _, nss := range ns.nsSelectors {
 		if nss.matches(obj.ObjectMeta.Labels) {
 			if err := nss.delEntry(ns.ipset.Name()); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Remove bypass rule
+	if !isDefaultDeny(obj) {
+		if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain,
+			"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+			return err
 		}
 	}
 
