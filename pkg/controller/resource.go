@@ -8,7 +8,6 @@ type ResourceKey string
 
 type ResourceSpec interface {
 	Key() ResourceKey
-	Metadata() map[string]string
 }
 
 type Resource interface {
