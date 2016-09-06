@@ -18,12 +18,12 @@ func shortName(arbitrary string) string {
 	sum := sha1.Sum([]byte(arbitrary))
 	i := big.NewInt(0).SetBytes(sum[:])
 	base := big.NewInt(int64(len(symbols)))
+	zero := big.NewInt(0)
 
 	result := make([]byte, 0)
 
 	// TODO pad to generate constant length strings
-	// TODO should this predicate be `while i != 0`?
-	for i.Cmp(base) >= 0 {
+	for i.Cmp(zero) > 0 {
 		remainder := new(big.Int).Mod(i, base)
 		i.Sub(i, remainder)
 		i.Div(i, base)
