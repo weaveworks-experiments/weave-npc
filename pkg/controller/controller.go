@@ -5,6 +5,7 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/iptables"
+	"log"
 	"sync"
 )
 
@@ -97,6 +98,7 @@ func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPol
 	defer npc.Unlock()
 
 	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
+		log.Println("Updating network policy from %v to %v", oldObj, newObj)
 		return errors.Wrap(ns.updateNetworkPolicy(oldObj, newObj), "update network policy")
 	})
 }

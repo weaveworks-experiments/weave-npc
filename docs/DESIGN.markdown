@@ -4,8 +4,6 @@ To direct traffic into the policy engine:
 
 iptables -A FORWARD -i weave -o weave -j WEAVE-NPC
 
-iptables -A FORWARD -o weave -m physdev ! --physdev-out vethwe-weave
-
 Note this only affects traffic which is _forwarded over_ the specified
 bridge device. This rule will not match:
 
@@ -23,13 +21,13 @@ Static configuration:
 
 ```
 iptables -A WEAVE-NPC -m state --state RELATED,ESTABLISHED -j ACCEPT
-iptables -A WEAVE-NPC -m state --state NEW -m set ! --match-set $ALLNSIPSET dst -j ACCEPT
-iptables -A WEAVE-NPC -m state --state NEW -j WEAVE-NPC-INGRESS-BYPASS
-iptables -A WEAVE-NPC -m state --state NEW -j WEAVE-NPC-INGRESS-RULES
+#iptables -A WEAVE-NPC -m state --state NEW -m set ! --match-set $ALLNSIPSET dst -j ACCEPT
+iptables -A WEAVE-NPC -m state --state NEW -j WEAVE-NPC-DEFAULT
+iptables -A WEAVE-NPC -m state --state NEW -j WEAVE-NPC-INGRESS
 iptables -A WEAVE-NPC -j DROP
 ```
 
-## WEAVE-NPC-INGRESS-BYPASS
+## WEAVE-NPC-DEFAULT
 
 For each namespace that has the default ingress policy:
 
@@ -37,7 +35,7 @@ For each namespace that has the default ingress policy:
 iptables -A WEAVE-NPC-DEFAULT -m set --match-set $NSIPSET dst -j ACCEPT
 ```
 
-## WEAVE-NPC-INGRESS-RULES
+## WEAVE-NPC-INGRESS
 
 For each namespace network policy ingress rule peer/port combination:
 

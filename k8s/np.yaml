@@ -15,4 +15,4 @@ spec:
         - protocol: TCP
           port: 6379
         - protocol: UDP
-          port: 6379
+          port: 6378

@@ -16,14 +16,15 @@ func newSelectorSet() selectorSet {
 }
 
 type selector struct {
-	json      *unversioned.LabelSelector // JSON representation (from API server)
-	ipsetType ipset.Type                 // type of ipset to provision
+	json *unversioned.LabelSelector // JSON representation (from API server)
+	dom  labels.Selector            // k8s domain object (for matching)
+	str  string                     // string representation (for hash keying/equality comparison)
 
-	dom       labels.Selector                         // k8s domain object (for matching)
-	str       string                                  // string representation (for hash keying/equality comparison)
-	policies  map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
-	ipsetName string                                  // generated ipset name
-	ipset     ipset.Interface                         // concrete ipset
+	ipsetType ipset.Type // type of ipset to provision
+	ipsetName string     // generated ipset name
+
+	policies map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
+	ipset    ipset.Interface                         // concrete ipset
 }
 
 func newSelector(json *unversioned.LabelSelector, nsName string, ipsetType ipset.Type) (*selector, error) {
