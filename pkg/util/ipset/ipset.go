@@ -5,6 +5,8 @@ import (
 	"os/exec"
 )
 
+type Name string
+
 type Type string
 
 const (
@@ -13,72 +15,57 @@ const (
 )
 
 type Interface interface {
-	Name() string
-	Create() error
-	AddEntry(entry string) error
-	DelEntry(entry string) error
-	Destroy() error
+	Create(ipsetName Name, ipsetType Type) error
+	AddEntry(ipsetName Name, entry string) error
+	DelEntry(ipsetName Name, entry string) error
+	Flush(ipsetName Name) error
+	Destroy(ipsetName Name) error
+
+	FlushAll() error
+	DestroyAll() error
 }
 
 type ipset struct {
-	name      string
-	ipsetType Type
-	entries   map[string]struct{}
 }
 
-func New(name string, ipsetType Type) Interface {
-	return &ipset{name, ipsetType, make(map[string]struct{})}
+func New() Interface {
+	return &ipset{}
 }
 
-func (i *ipset) Name() string {
-	return i.name
+func (i *ipset) Create(ipsetName Name, ipsetType Type) error {
+	return doExec("create", string(ipsetName), string(ipsetType))
 }
 
-func (i *ipset) Create() error {
-	if _, err := exec.Command("ipset", "create", i.name, string(i.ipsetType)).Output(); err != nil {
+func (i *ipset) AddEntry(ipsetName Name, entry string) error {
+	return doExec("add", string(ipsetName), entry)
+}
+
+func (i *ipset) DelEntry(ipsetName Name, entry string) error {
+	return doExec("del", string(ipsetName), entry)
+}
+
+func (i *ipset) Flush(ipsetName Name) error {
+	return doExec("flush", string(ipsetName))
+}
+
+func (i *ipset) FlushAll() error {
+	return doExec("flush")
+}
+
+func (i *ipset) Destroy(ipsetName Name) error {
+	return doExec("destroy", string(ipsetName))
+}
+
+func (i *ipset) DestroyAll() error {
+	return doExec("destroy")
+}
+
+func doExec(args ...string) error {
+	if _, err := exec.Command("ipset", args...).Output(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
-			return errors.Wrapf(err, "ipset create %s %s failed: %s", i.name, string(i.ipsetType), ee.Stderr)
+			return errors.Wrapf(err, "ipset %v failed: %s", args, ee.Stderr)
 		} else {
-			return errors.Wrapf(err, "ipset create %s %s failed", i.name, string(i.ipsetType))
-		}
-	}
-	return nil
-}
-
-func (i *ipset) AddEntry(entry string) error {
-	if _, found := i.entries[entry]; !found {
-		if err := exec.Command("ipset", "add", i.name, entry).Run(); err != nil {
-			if ee, ok := err.(*exec.ExitError); ok {
-				return errors.Wrapf(err, "ipset add %s %s failed: %s", i.name, entry, ee.Stderr)
-			} else {
-				return errors.Wrapf(err, "ipset add %s %s failed", i.name, entry)
-			}
-		}
-		i.entries[entry] = struct{}{}
-	}
-	return nil
-}
-
-func (i *ipset) DelEntry(entry string) error {
-	if _, found := i.entries[entry]; found {
-		if err := exec.Command("ipset", "del", i.name, entry).Run(); err != nil {
-			if ee, ok := err.(*exec.ExitError); ok {
-				return errors.Wrapf(err, "ipset del %s %s failed: %s", i.name, entry, ee.Stderr)
-			} else {
-				return errors.Wrapf(err, "ipset del %s %s failed", i.name, entry)
-			}
-		}
-		delete(i.entries, entry)
-	}
-	return nil
-}
-
-func (i *ipset) Destroy() error {
-	if err := exec.Command("ipset", "destroy", i.name).Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return errors.Wrapf(err, "ipset destroy %s failed: %s", i.name, ee.Stderr)
-		} else {
-			return errors.Wrapf(err, "ipset destroy %s failed", i.name)
+			return errors.Wrapf(err, "ipset %v failed", args)
 		}
 	}
 	return nil

@@ -21,10 +21,9 @@ type selector struct {
 	str  string                     // string representation (for hash keying/equality comparison)
 
 	ipsetType ipset.Type // type of ipset to provision
-	ipsetName string     // generated ipset name
+	ipsetName ipset.Name // generated ipset name
 
 	policies map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
-	ipset    ipset.Interface                         // concrete ipset
 }
 
 func newSelector(json *unversioned.LabelSelector, nsName string, ipsetType ipset.Type) (*selector, error) {
@@ -41,33 +40,24 @@ func newSelector(json *unversioned.LabelSelector, nsName string, ipsetType ipset
 		// We prefix the selector string with the namespace name when generating
 		// the shortname because you can specify the same selector in multiple
 		// namespaces - we need those to map to distinct ipsets
-		ipsetName: "weave-" + shortName(nsName+":"+str)}, nil
+		ipsetName: ipset.Name("weave-" + shortName(nsName+":"+str))}, nil
 }
 
 func (s *selector) matches(labelMap map[string]string) bool {
 	return s.dom.Matches(labels.Set(labelMap))
 }
 
-func (s *selector) addEntry(name string) error {
-	return s.ipset.AddEntry(name)
-}
-
-func (s *selector) delEntry(name string) error {
-	return s.ipset.DelEntry(name)
-}
-
-func (s *selector) provision() error {
+func (s *selector) provision(ips ipset.Interface) error {
 	if s.policies != nil {
 		return fmt.Errorf("Selector already provisioned: %s", s.str)
 	}
 
 	s.policies = make(map[types.UID]*extensions.NetworkPolicy)
-	s.ipset = ipset.New(s.ipsetName, s.ipsetType)
 
-	return s.ipset.Create()
+	return ips.Create(s.ipsetName, s.ipsetType)
 }
 
-func (s *selector) deprovision() error {
+func (s *selector) deprovision(ips ipset.Interface) error {
 	if s.policies == nil {
 		return fmt.Errorf("Selector already deprovisioned: %s", s.str)
 	}
@@ -78,8 +68,7 @@ func (s *selector) deprovision() error {
 
 	defer func() {
 		s.policies = nil
-		s.ipset = nil
 	}()
 
-	return s.ipset.Destroy()
+	return ips.Destroy(s.ipsetName)
 }

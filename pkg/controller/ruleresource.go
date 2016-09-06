@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+const (
+	MainChain    = iptables.Chain("WEAVE-NPC")
+	DefaultChain = iptables.Chain("WEAVE-NPC-DEFAULT")
+	IngressChain = iptables.Chain("WEAVE-NPC-INGRESS")
+)
+
 type ruleResourceSpec struct {
 	key  string
 	args []string
@@ -28,10 +34,10 @@ func NewRuleResourceSpec(proto *string, srcHost *selector, dstHost *selector, ds
 		args = append(args, "-p", *proto)
 	}
 	if srcHost != nil {
-		args = append(args, "-m", "set", "--match-set", srcHost.ipsetName, "src")
+		args = append(args, "-m", "set", "--match-set", string(srcHost.ipsetName), "src")
 	}
 	if dstHost != nil {
-		args = append(args, "-m", "set", "--match-set", dstHost.ipsetName, "dst")
+		args = append(args, "-m", "set", "--match-set", string(dstHost.ipsetName), "dst")
 	}
 	if dstPort != nil {
 		args = append(args, "--dport", *dstPort)

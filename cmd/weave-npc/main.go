@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/pkg/errors"
 	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/client/cache"
@@ -10,13 +10,12 @@ import (
 	"k8s.io/kubernetes/pkg/controller/framework"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/runtime"
-	utildbus "k8s.io/kubernetes/pkg/util/dbus"
-	utilexec "k8s.io/kubernetes/pkg/util/exec"
-	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
-	utilwait "k8s.io/kubernetes/pkg/util/wait"
+	"k8s.io/kubernetes/pkg/util/dbus"
+	"k8s.io/kubernetes/pkg/util/exec"
+	"k8s.io/kubernetes/pkg/util/iptables"
+	"k8s.io/kubernetes/pkg/util/wait"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 )
@@ -34,21 +33,21 @@ func makeController(getter cache.Getter, resource string,
 	return controller
 }
 
-func ensureFlushedChain(ipt utiliptables.Interface, chain utiliptables.Chain) error {
-	needFlush, err := ipt.EnsureChain(utiliptables.TableFilter, chain)
+func ensureFlushedChain(ipt iptables.Interface, chain iptables.Chain) error {
+	needFlush, err := ipt.EnsureChain(iptables.TableFilter, chain)
 	if err != nil {
 		return err
 	}
 
 	if needFlush {
-		if err := ipt.FlushChain(utiliptables.TableFilter, chain); err != nil {
+		if err := ipt.FlushChain(iptables.TableFilter, chain); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func resetIPTables(ipt utiliptables.Interface) error {
+func resetIPTables(ipt iptables.Interface) error {
 	// Flush chains first so there are no refs to extant ipsets
 	if err := ensureFlushedChain(ipt, weavenpc.IngressChain); err != nil {
 		return err
@@ -63,44 +62,38 @@ func resetIPTables(ipt utiliptables.Interface) error {
 	}
 
 	// Configure main chain static rules
-	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
 		"-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"); err != nil {
 		return err
 	}
 
-	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
 		"-m", "state", "--state", "NEW", "-j", "WEAVE-NPC-DEFAULT"); err != nil {
 		return err
 	}
 
-	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
 		"-m", "state", "--state", "NEW", "-j", "WEAVE-NPC-INGRESS"); err != nil {
 		return err
 	}
 
-	if _, err := ipt.EnsureRule(utiliptables.Append, utiliptables.TableFilter, weavenpc.MainChain,
+	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
 		"-j", "DROP"); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func resetIPSets(ips ipset.Interface) error {
 	// TODO should restrict ipset operations to the `weave-` prefix:
 
-	// Now flush the ipsets to clear out list:set interdependencies
-	if err := exec.Command("ipset", "flush").Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return errors.Wrapf(err, "ipset flush failed: %s", ee.Stderr)
-		} else {
-			return errors.Wrapf(err, "ipset flush failed")
-		}
+	if err := ips.FlushAll(); err != nil {
+		return err
 	}
 
-	// Finally destroy the ipsets
-	if err := exec.Command("ipset", "destroy").Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return errors.Wrapf(err, "ipset destroy failed: %s", ee.Stderr)
-		} else {
-			return errors.Wrapf(err, "ipset destroy failed")
-		}
+	if err := ips.DestroyAll(); err != nil {
+		return err
 	}
 
 	return nil
@@ -113,11 +106,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ipt := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
+	ipt := iptables.New(exec.New(), dbus.New(), iptables.ProtocolIpv4)
+	ips := ipset.New()
 
 	handleError(resetIPTables(ipt))
+	handleError(resetIPSets(ips))
 
-	npc := weavenpc.New(ipt)
+	npc := weavenpc.New(ipt, ips)
 
 	nsController := makeController(client, "namespaces", &api.Namespace{},
 		framework.ResourceEventHandlerFuncs{
@@ -155,9 +150,9 @@ func main() {
 				handleError(npc.UpdateNetworkPolicy(old.(*extensions.NetworkPolicy), new.(*extensions.NetworkPolicy)))
 			}})
 
-	go nsController.Run(utilwait.NeverStop)
-	go podController.Run(utilwait.NeverStop)
-	go npController.Run(utilwait.NeverStop)
+	go nsController.Run(wait.NeverStop)
+	go podController.Run(wait.NeverStop)
+	go npController.Run(wait.NeverStop)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)

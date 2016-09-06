@@ -11,33 +11,38 @@ import (
 )
 
 type ns struct {
-	ipt iptables.Interface
+	ipt iptables.Interface // interface to iptables
+	ips ipset.Interface    // interface to ipset
 
-	name         string
-	namespace    *api.Namespace
-	pods         map[types.UID]*api.Pod                  // pod UID -> k8s Pods
-	policies     map[types.UID]*extensions.NetworkPolicy // policy UID -> k8s NetworkPolicy
-	ipset        ipset.Interface                         // hash:ip ipset of pod IPs in this namespace
-	podSelectors selectorSet                             // selector string -> podSelector
-	nss          map[string]*ns                          // ns name -> ns struct
-	nsSelectors  selectorSet                             // selector string -> nsSelector
+	nss map[string]*ns // all namespaces
 
-	rules ResourceManager
+	name      string                                  // k8s Namespace name
+	namespace *api.Namespace                          // k8s Namespace object
+	pods      map[types.UID]*api.Pod                  // k8s Pod objects by UID
+	policies  map[types.UID]*extensions.NetworkPolicy // k8s NetworkPolicy objects by UID
+
+	ipsetName ipset.Name // Name of hash:ip ipset storing pod IPs in this namespace
+
+	podSelectors selectorSet // selector string -> podSelector
+	nsSelectors  selectorSet // selector string -> nsSelector
+	rules        ResourceManager
 }
 
-func newNS(name string, ipt iptables.Interface, nss map[string]*ns, nsSelectors selectorSet) (*ns, error) {
-	ipset := ipset.New("weave-"+shortName(name), "hash:ip")
-	if err := ipset.Create(); err != nil {
+func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nss map[string]*ns, nsSelectors selectorSet) (*ns, error) {
+	ipsetName := ipset.Name("weave-" + shortName(name))
+	if err := ips.Create(ipsetName, ipset.HashIP); err != nil {
 		return nil, err
 	}
 	return &ns{
 		ipt:          ipt,
+		ips:          ips,
+		nss:          nss,
 		name:         name,
+		namespace:    nil,
 		pods:         make(map[types.UID]*api.Pod),
 		policies:     make(map[types.UID]*extensions.NetworkPolicy),
-		ipset:        ipset,
+		ipsetName:    ipsetName,
 		podSelectors: newSelectorSet(),
-		nss:          nss,
 		nsSelectors:  nsSelectors,
 		rules:        NewResourceManager(NewRuleResourceOps(ipt))}, nil
 }
@@ -47,7 +52,7 @@ func (ns *ns) empty() bool {
 }
 
 func (ns *ns) destroy() error {
-	if err := ns.ipset.Destroy(); err != nil {
+	if err := ns.ips.Destroy(ns.ipsetName); err != nil {
 		return err
 	}
 	return nil
@@ -89,12 +94,12 @@ func (ns *ns) updatePod(oldObj, newObj *api.Pod) error {
 				continue
 			}
 			if oldMatch {
-				if err := ps.delEntry(oldObj.Status.PodIP); err != nil {
+				if err := ns.ips.DelEntry(ps.ipsetName, oldObj.Status.PodIP); err != nil {
 					return err
 				}
 			}
 			if newMatch {
-				if err := ps.addEntry(newObj.Status.PodIP); err != nil {
+				if err := ns.ips.AddEntry(ps.ipsetName, newObj.Status.PodIP); err != nil {
 					return err
 				}
 			}
@@ -128,7 +133,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		if existingSelector, found := ns.nsSelectors[selectorKey]; found {
 			existingSelector.policies[obj.ObjectMeta.UID] = obj
 		} else {
-			if err := selector.provision(); err != nil {
+			if err := selector.provision(ns.ips); err != nil {
 				return err
 			}
 
@@ -137,7 +142,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 			for _, otherNs := range ns.nss {
 				if otherNs.namespace != nil {
 					if selector.matches(otherNs.namespace.ObjectMeta.Labels) {
-						if err := selector.addEntry(otherNs.ipset.Name()); err != nil {
+						if err := ns.ips.AddEntry(selector.ipsetName, string(otherNs.ipsetName)); err != nil {
 							return err
 						}
 					}
@@ -153,7 +158,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		if existingSelector, found := ns.podSelectors[selectorKey]; found {
 			existingSelector.policies[obj.ObjectMeta.UID] = obj
 		} else {
-			if err := selector.provision(); err != nil {
+			if err := selector.provision(ns.ips); err != nil {
 				return err
 			}
 
@@ -162,7 +167,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 			for _, pod := range ns.pods {
 				if hasIP(pod) {
 					if selector.matches(pod.ObjectMeta.Labels) {
-						if err := selector.addEntry(pod.Status.PodIP); err != nil {
+						if err := ns.ips.AddEntry(selector.ipsetName, pod.Status.PodIP); err != nil {
 							return err
 						}
 					}
@@ -206,7 +211,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 			} else {
 				delete(selector.policies, oldObj.ObjectMeta.UID)
 				if len(selector.policies) == 0 {
-					if err := selector.deprovision(); err != nil {
+					if err := selector.deprovision(ns.ips); err != nil {
 						return err
 					}
 					delete(ns.nsSelectors, key)
@@ -216,7 +221,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 
 		for key, selector := range newNsSelectors {
 			if _, found := ns.nsSelectors[key]; !found {
-				if err := selector.provision(); err != nil {
+				if err := selector.provision(ns.ips); err != nil {
 					return err
 				}
 
@@ -225,7 +230,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 				for _, otherNs := range ns.nss {
 					if otherNs.namespace != nil {
 						if selector.matches(otherNs.namespace.ObjectMeta.Labels) {
-							if err := selector.addEntry(otherNs.ipset.Name()); err != nil {
+							if err := ns.ips.AddEntry(selector.ipsetName, string(otherNs.ipsetName)); err != nil {
 								return err
 							}
 						}
@@ -250,7 +255,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 			} else {
 				delete(selector.policies, oldObj.ObjectMeta.UID)
 				if len(selector.policies) == 0 {
-					if err := selector.deprovision(); err != nil {
+					if err := selector.deprovision(ns.ips); err != nil {
 						return err
 					}
 					delete(ns.podSelectors, key)
@@ -260,7 +265,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 
 		for key, selector := range newPodSelectors {
 			if _, found := ns.podSelectors[key]; !found {
-				if err := selector.provision(); err != nil {
+				if err := selector.provision(ns.ips); err != nil {
 					return err
 				}
 
@@ -269,7 +274,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 				for _, pod := range ns.pods {
 					if hasIP(pod) {
 						if selector.matches(pod.ObjectMeta.Labels) {
-							if err := selector.addEntry(pod.Status.PodIP); err != nil {
+							if err := ns.ips.AddEntry(selector.ipsetName, pod.Status.PodIP); err != nil {
 								return err
 							}
 						}
@@ -307,7 +312,7 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		if selector, found := ns.nsSelectors[key]; found {
 			delete(selector.policies, obj.ObjectMeta.UID)
 			if len(selector.policies) == 0 {
-				if err := selector.deprovision(); err != nil {
+				if err := selector.deprovision(ns.ips); err != nil {
 					return err
 				}
 				delete(ns.nsSelectors, key)
@@ -320,7 +325,7 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		if selector, found := ns.podSelectors[key]; found {
 			delete(selector.policies, obj.ObjectMeta.UID)
 			if len(selector.policies) == 0 {
-				if err := selector.deprovision(); err != nil {
+				if err := selector.deprovision(ns.ips); err != nil {
 					return err
 				}
 				delete(ns.podSelectors, key)
@@ -337,15 +342,15 @@ func (ns *ns) addNamespace(obj *api.Namespace) error {
 	// Insert a rule to bypass policies if namespace is DefaultAllow
 	if !isDefaultDeny(obj) {
 		if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain,
-			"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+			"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
 			return err
 		}
 	}
 
 	// Add namespace ipset to matching namespace selectors
-	for _, nss := range ns.nsSelectors {
-		if nss.matches(obj.ObjectMeta.Labels) {
-			if err := nss.addEntry(ns.ipset.Name()); err != nil {
+	for _, selector := range ns.nsSelectors {
+		if selector.matches(obj.ObjectMeta.Labels) {
+			if err := ns.ips.AddEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
 				return err
 			}
 		}
@@ -364,13 +369,13 @@ func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 	if oldDefaultDeny != newDefaultDeny {
 		if oldDefaultDeny {
 			if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain,
-				"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+				"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
 				return err
 			}
 		}
 		if newDefaultDeny {
 			if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain,
-				"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+				"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
 				return err
 			}
 		}
@@ -378,19 +383,19 @@ func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 
 	// Re-evaluate namespace selector membership if labels have changed
 	if !equals(oldObj.ObjectMeta.Labels, newObj.ObjectMeta.Labels) {
-		for _, nss := range ns.nsSelectors {
-			oldMatch := nss.matches(oldObj.ObjectMeta.Labels)
-			newMatch := nss.matches(newObj.ObjectMeta.Labels)
+		for _, selector := range ns.nsSelectors {
+			oldMatch := selector.matches(oldObj.ObjectMeta.Labels)
+			newMatch := selector.matches(newObj.ObjectMeta.Labels)
 			if oldMatch == newMatch {
 				continue
 			}
 			if oldMatch {
-				if err := nss.delEntry(ns.ipset.Name()); err != nil {
+				if err := ns.ips.DelEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
 					return err
 				}
 			}
 			if newMatch {
-				if err := nss.addEntry(ns.ipset.Name()); err != nil {
+				if err := ns.ips.AddEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
 					return err
 				}
 			}
@@ -404,9 +409,9 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 	ns.namespace = nil
 
 	// Remove namespace ipset from any matching namespace selectors
-	for _, nss := range ns.nsSelectors {
-		if nss.matches(obj.ObjectMeta.Labels) {
-			if err := nss.delEntry(ns.ipset.Name()); err != nil {
+	for _, selector := range ns.nsSelectors {
+		if selector.matches(obj.ObjectMeta.Labels) {
+			if err := ns.ips.DelEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
 				return err
 			}
 		}
@@ -415,7 +420,7 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 	// Remove bypass rule
 	if !isDefaultDeny(obj) {
 		if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain,
-			"-m", "set", "--match-set", ns.ipset.Name(), "dst", "-j", "ACCEPT"); err != nil {
+			"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
 			return err
 		}
 	}
@@ -424,13 +429,13 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 }
 
 func (ns *ns) addToMatching(obj *api.Pod) error {
-	if err := ns.ipset.AddEntry(obj.Status.PodIP); err != nil {
+	if err := ns.ips.AddEntry(ns.ipsetName, obj.Status.PodIP); err != nil {
 		return errors.Wrap(err, "addToMatching")
 	}
 
 	for _, ps := range ns.podSelectors {
 		if ps.matches(obj.ObjectMeta.Labels) {
-			if err := ps.addEntry(obj.Status.PodIP); err != nil {
+			if err := ns.ips.AddEntry(ps.ipsetName, obj.Status.PodIP); err != nil {
 				return err
 			}
 		}
@@ -440,13 +445,13 @@ func (ns *ns) addToMatching(obj *api.Pod) error {
 }
 
 func (ns *ns) delFromMatching(obj *api.Pod) error {
-	if err := ns.ipset.DelEntry(obj.Status.PodIP); err != nil {
+	if err := ns.ips.DelEntry(ns.ipsetName, obj.Status.PodIP); err != nil {
 		return err
 	}
 
 	for _, ps := range ns.podSelectors {
 		if ps.matches(obj.ObjectMeta.Labels) {
-			if err := ps.delEntry(obj.Status.PodIP); err != nil {
+			if err := ns.ips.DelEntry(ps.ipsetName, obj.Status.PodIP); err != nil {
 				return err
 			}
 		}

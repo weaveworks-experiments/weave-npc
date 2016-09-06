@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/pkg/errors"
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/iptables"
@@ -26,14 +27,17 @@ type NetworkPolicyController interface {
 type controller struct {
 	sync.Mutex
 
-	ipt         iptables.Interface
+	ipt iptables.Interface
+	ips ipset.Interface
+
 	nss         map[string]*ns // ns name -> ns struct
 	nsSelectors selectorSet    // selector string -> nsSelector
 }
 
-func New(ipt iptables.Interface) NetworkPolicyController {
+func New(ipt iptables.Interface, ips ipset.Interface) NetworkPolicyController {
 	return &controller{
 		ipt:         ipt,
+		ips:         ips,
 		nss:         make(map[string]*ns),
 		nsSelectors: newSelectorSet()}
 }
@@ -41,7 +45,7 @@ func New(ipt iptables.Interface) NetworkPolicyController {
 func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 	ns, found := npc.nss[name]
 	if !found {
-		newNs, err := newNS(name, npc.ipt, npc.nss, npc.nsSelectors)
+		newNs, err := newNS(name, npc.ipt, npc.ips, npc.nss, npc.nsSelectors)
 		if err != nil {
 			return err
 		}
