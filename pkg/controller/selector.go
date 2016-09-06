@@ -2,7 +2,7 @@ package controller
 
 import (
 	"fmt"
-	"github.com/weaveworks/weave-npc/pkg/ipset"
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/labels"
