@@ -8,10 +8,10 @@ import (
 	"k8s.io/kubernetes/pkg/util/intstr"
 )
 
-func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, nsSelectors, podSelectors selectorSet, err error) {
+func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules map[ResourceKey]ResourceSpec, nsSelectors, podSelectors selectorSet, err error) {
 	nsSelectors = newSelectorSet()
 	podSelectors = newSelectorSet()
-	rules = make([]*rule, 0)
+	rules = make(map[ResourceKey]ResourceSpec)
 
 	dstSelector, err := newSelector(&policy.Spec.PodSelector, ns.name, ipset.HashIP)
 	if err != nil {
@@ -34,12 +34,14 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, ns
 			// From is not provided, this rule matches all sources (traffic not restricted by source).
 			if ingressRule.Ports == nil {
 				// Ports is not provided, this rule matches all ports (traffic not restricted by port).
-				rules = append(rules, newRule(nil, nil, dstSelector, nil))
+				rule := NewRuleResourceSpec(nil, nil, dstSelector, nil)
+				rules[rule.Key()] = rule
 			} else {
 				// Ports is present and contains at least one item, then this rule allows traffic
 				// only if the traffic matches at least one port in the ports list.
 				withNormalisedProtoAndPort(ingressRule.Ports, func(proto, port string) {
-					rules = append(rules, newRule(&proto, nil, dstSelector, &port))
+					rule := NewRuleResourceSpec(&proto, nil, dstSelector, &port)
+					rules[rule.Key()] = rule
 				})
 			}
 		} else {
@@ -64,12 +66,14 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules []*rule, ns
 
 				if ingressRule.Ports == nil {
 					// Ports is not provided, this rule matches all ports (traffic not restricted by port).
-					rules = append(rules, newRule(nil, srcSelector, dstSelector, nil))
+					rule := NewRuleResourceSpec(nil, srcSelector, dstSelector, nil)
+					rules[rule.Key()] = rule
 				} else {
 					// Ports is present and contains at least one item, then this rule allows traffic
 					// only if the traffic matches at least one port in the ports list.
 					withNormalisedProtoAndPort(ingressRule.Ports, func(proto, port string) {
-						rules = append(rules, newRule(&proto, srcSelector, dstSelector, &port))
+						rule := NewRuleResourceSpec(&proto, srcSelector, dstSelector, &port)
+						rules[rule.Key()] = rule
 					})
 				}
 			}

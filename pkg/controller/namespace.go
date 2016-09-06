@@ -21,6 +21,8 @@ type ns struct {
 	podSelectors selectorSet                             // selector string -> podSelector
 	nss          map[string]*ns                          // ns name -> ns struct
 	nsSelectors  selectorSet                             // selector string -> nsSelector
+
+	rules ResourceManager
 }
 
 func newNS(name string, ipt iptables.Interface, nss map[string]*ns, nsSelectors selectorSet) (*ns, error) {
@@ -36,7 +38,8 @@ func newNS(name string, ipt iptables.Interface, nss map[string]*ns, nsSelectors 
 		ipset:        ipset,
 		podSelectors: newSelectorSet(),
 		nss:          nss,
-		nsSelectors:  nsSelectors}, nil
+		nsSelectors:  nsSelectors,
+		rules:        NewResourceManager(NewRuleResourceOps(ipt))}, nil
 }
 
 func (ns *ns) empty() bool {
@@ -163,11 +166,8 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 		}
 	}
 
-	// No need to reference count rules - iptables permits duplicates
-	for _, rule := range rules {
-		if err := rule.provision(ns.ipt); err != nil {
-			return err
-		}
+	if err := ns.rules.UpdateUsage(obj.ObjectMeta.UID, nil, rules); err != nil {
+		return err
 	}
 
 	return nil
@@ -274,16 +274,8 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 		}
 	}
 
-	// Take advantage of iptables behaviour to avoid diffing/reference counting rules
-	for _, rule := range newRules {
-		if err := rule.provision(ns.ipt); err != nil {
-			return err
-		}
-	}
-	for _, rule := range oldRules {
-		if err := rule.deprovision(ns.ipt); err != nil {
-			return err
-		}
+	if err := ns.rules.UpdateUsage(oldObj.ObjectMeta.UID, oldRules, newRules); err != nil {
+		return err
 	}
 
 	return nil
@@ -292,18 +284,15 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	delete(ns.policies, obj.ObjectMeta.UID)
 
-	// Analyse the network policy to free resources
+	// Analyse network policy to free resources
 	rules, nsSelectors, podSelectors, err := ns.analysePolicy(obj)
 	if err != nil {
 		return err
 	}
 
-	// Remove rules first, so that ipsets are freed. No need to reference count
-	// rules - iptables deletion removes duplicated rules one at a time
-	for _, rule := range rules {
-		if err := rule.deprovision(ns.ipt); err != nil {
-			return err
-		}
+	// Remove rules first, so that ipsets are freed
+	if err := ns.rules.UpdateUsage(obj.ObjectMeta.UID, rules, nil); err != nil {
+		return err
 	}
 
 	// Deprovision namespace selector ipsets that are no longer in use
