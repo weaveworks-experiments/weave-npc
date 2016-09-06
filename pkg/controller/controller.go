@@ -52,6 +52,9 @@ func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 		return err
 	}
 	if ns.empty() {
+		if err := ns.destroy(); err != nil {
+			return err
+		}
 		delete(npc.nss, name)
 	}
 	return nil

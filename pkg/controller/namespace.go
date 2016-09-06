@@ -46,6 +46,13 @@ func (ns *ns) empty() bool {
 	return len(ns.pods) == 0 && len(ns.policies) == 0 && ns.namespace == nil
 }
 
+func (ns *ns) destroy() error {
+	if err := ns.ipset.Destroy(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (ns *ns) addPod(obj *api.Pod) error {
 	ns.pods[obj.ObjectMeta.UID] = obj
 
