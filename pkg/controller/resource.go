@@ -20,7 +20,8 @@ type ResourceOps interface {
 }
 
 type ResourceManager interface {
-	UpdateUsage(user types.UID, current, desired map[ResourceKey]ResourceSpec) error
+	DeprovisionUnused(user types.UID, current, desired map[ResourceKey]ResourceSpec) error
+	ProvisionNew(user types.UID, current, desired map[ResourceKey]ResourceSpec) error
 }
 
 type resourceManager struct {
@@ -36,7 +37,7 @@ func NewResourceManager(ops ResourceOps) ResourceManager {
 		resources: make(map[ResourceKey]Resource)}
 }
 
-func (rm *resourceManager) UpdateUsage(user types.UID, current, desired map[ResourceKey]ResourceSpec) error {
+func (rm *resourceManager) DeprovisionUnused(user types.UID, current, desired map[ResourceKey]ResourceSpec) error {
 	// Unreference (destroying if necessary) resources no longer needed by user
 	for key, _ := range current {
 		if _, found := desired[key]; !found {
@@ -51,6 +52,10 @@ func (rm *resourceManager) UpdateUsage(user types.UID, current, desired map[Reso
 		}
 	}
 
+	return nil
+}
+
+func (rm *resourceManager) ProvisionNew(user types.UID, current, desired map[ResourceKey]ResourceSpec) error {
 	// Reference (creating if necessary) resources now needed by user
 	for key, spec := range desired {
 		if _, found := current[key]; !found {

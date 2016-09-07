@@ -4,16 +4,9 @@ import (
 	"fmt"
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api/unversioned"
-	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/types"
 )
-
-type selectorSet map[string]*selector
-
-func newSelectorSet() selectorSet {
-	return selectorSet(make(map[string]*selector))
-}
 
 type selector struct {
 	json *unversioned.LabelSelector // JSON representation (from API server)
@@ -23,7 +16,7 @@ type selector struct {
 	ipsetType ipset.Type // type of ipset to provision
 	ipsetName ipset.Name // generated ipset name
 
-	policies map[types.UID]*extensions.NetworkPolicy // set of policies which depend on this selector
+	policies map[types.UID]struct{} // set of policies depending on this selector
 }
 
 func newSelector(json *unversioned.LabelSelector, nsName string, ipsetType ipset.Type) (*selector, error) {
@@ -52,7 +45,7 @@ func (s *selector) provision(ips ipset.Interface) error {
 		return fmt.Errorf("Selector already provisioned: %s", s.str)
 	}
 
-	s.policies = make(map[types.UID]*extensions.NetworkPolicy)
+	s.policies = make(map[types.UID]struct{})
 
 	return ips.Create(s.ipsetName, s.ipsetType)
 }
@@ -71,4 +64,10 @@ func (s *selector) deprovision(ips ipset.Interface) error {
 	}()
 
 	return ips.Destroy(s.ipsetName)
+}
+
+type selectorSet map[string]*selector
+
+func newSelectorSet() selectorSet {
+	return selectorSet(make(map[string]*selector))
 }

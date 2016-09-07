@@ -42,10 +42,23 @@ func New(ipt iptables.Interface, ips ipset.Interface) NetworkPolicyController {
 		nsSelectors: newSelectorSet()}
 }
 
+func (npc *controller) onNewNsSelector(selector *selector) error {
+	for _, ns := range npc.nss {
+		if ns.namespace != nil {
+			if selector.matches(ns.namespace.ObjectMeta.Labels) {
+				if err := ns.ips.AddEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 	ns, found := npc.nss[name]
 	if !found {
-		newNs, err := newNS(name, npc.ipt, npc.ips, npc.nss, npc.nsSelectors)
+		newNs, err := newNS(name, npc.ipt, npc.ips, npc.nsSelectors, npc.onNewNsSelector)
 		if err != nil {
 			return err
 		}
