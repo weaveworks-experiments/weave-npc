@@ -10,8 +10,6 @@ import (
 	"k8s.io/kubernetes/pkg/util/iptables"
 )
 
-type selectorFn func(selector *selector) error
-
 type ns struct {
 	ipt iptables.Interface // interface to iptables
 	ips ipset.Interface    // interface to ipset
@@ -23,30 +21,30 @@ type ns struct {
 
 	ipsetName ipset.Name // Name of hash:ip ipset storing pod IPs in this namespace
 
-	onNewNsSelector selectorFn
-
-	podSelectors *selectorSet // selector string -> podSelector
 	nsSelectors  *selectorSet // selector string -> nsSelector
+	podSelectors *selectorSet // selector string -> podSelector
 	rules        ResourceManager
 }
 
-func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors *selectorSet, onNewNsSelector selectorFn) (*ns, error) {
+func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors *selectorSet) (*ns, error) {
 	ipsetName := ipset.Name("weave-" + shortName(name))
 	if err := ips.Create(ipsetName, ipset.HashIP); err != nil {
 		return nil, err
 	}
-	return &ns{
-		ipt:             ipt,
-		ips:             ips,
-		name:            name,
-		namespace:       nil,
-		pods:            make(map[types.UID]*api.Pod),
-		policies:        make(map[types.UID]*extensions.NetworkPolicy),
-		ipsetName:       ipsetName,
-		onNewNsSelector: onNewNsSelector,
-		podSelectors:    newSelectorSet(),
-		nsSelectors:     nsSelectors,
-		rules:           NewResourceManager(NewRuleResourceOps(ipt))}, nil
+
+	n := &ns{
+		ipt:         ipt,
+		ips:         ips,
+		name:        name,
+		pods:        make(map[types.UID]*api.Pod),
+		policies:    make(map[types.UID]*extensions.NetworkPolicy),
+		ipsetName:   ipsetName,
+		nsSelectors: nsSelectors,
+		rules:       NewResourceManager(NewRuleResourceOps(ipt))}
+
+	n.podSelectors = newSelectorSet(ips, n.onNewPodSelector)
+
+	return n, nil
 }
 
 func (ns *ns) empty() bool {
@@ -64,7 +62,7 @@ func (ns *ns) onNewPodSelector(selector *selector) error {
 	for _, pod := range ns.pods {
 		if hasIP(pod) {
 			if selector.matches(pod.ObjectMeta.Labels) {
-				if err := ns.ips.AddEntry(selector.ipsetName, pod.Status.PodIP); err != nil {
+				if err := ns.ips.AddEntry(selector.spec.ipsetName, pod.Status.PodIP); err != nil {
 					return err
 				}
 			}
@@ -109,12 +107,12 @@ func (ns *ns) updatePod(oldObj, newObj *api.Pod) error {
 				continue
 			}
 			if oldMatch {
-				if err := ns.ips.DelEntry(ps.ipsetName, oldObj.Status.PodIP); err != nil {
+				if err := ns.ips.DelEntry(ps.spec.ipsetName, oldObj.Status.PodIP); err != nil {
 					return err
 				}
 			}
 			if newMatch {
-				if err := ns.ips.AddEntry(ps.ipsetName, newObj.Status.PodIP); err != nil {
+				if err := ns.ips.AddEntry(ps.spec.ipsetName, newObj.Status.PodIP); err != nil {
 					return err
 				}
 			}
@@ -144,12 +142,12 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	}
 
 	// Provision any missing namespace selector ipsets; reference existing
-	if err := ns.provisionNewSelectors(obj.ObjectMeta.UID, nil, nsSelectors, ns.onNewNsSelector); err != nil {
+	if err := ns.nsSelectors.ProvisionNew(obj.ObjectMeta.UID, nil, nsSelectors); err != nil {
 		return err
 	}
 
 	// Provision any missing pod selector ipsets; reference existing
-	if err := ns.provisionNewSelectors(obj.ObjectMeta.UID, nil, podSelectors, ns.onNewPodSelector); err != nil {
+	if err := ns.podSelectors.ProvisionNew(obj.ObjectMeta.UID, nil, podSelectors); err != nil {
 		return err
 	}
 
@@ -182,22 +180,22 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 	}
 
 	// Deprovision namespace selector ipsets that are no longer in use
-	if err := ns.deprovisionUnusedSelectors(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors); err != nil {
+	if err := ns.nsSelectors.DeprovisionUnused(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors); err != nil {
 		return err
 	}
 
 	// Deprovision pod selector ipsets that are no longer in use
-	if err := ns.deprovisionUnusedSelectors(oldObj.ObjectMeta.UID, oldPodSelectors, newPodSelectors); err != nil {
+	if err := ns.podSelectors.DeprovisionUnused(oldObj.ObjectMeta.UID, oldPodSelectors, newPodSelectors); err != nil {
 		return err
 	}
 
 	// Provision any missing namespace selector ipsets; reference existing
-	if err := ns.provisionNewSelectors(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors, ns.onNewNsSelector); err != nil {
+	if err := ns.nsSelectors.ProvisionNew(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors); err != nil {
 		return err
 	}
 
 	// Provision any missing pod selector ipsets; reference existing
-	if err := ns.provisionNewSelectors(oldObj.ObjectMeta.UID, oldPodSelectors, newNsSelectors, ns.onNewPodSelector); err != nil {
+	if err := ns.podSelectors.ProvisionNew(oldObj.ObjectMeta.UID, oldPodSelectors, newNsSelectors); err != nil {
 		return err
 	}
 
@@ -224,12 +222,12 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	}
 
 	// Deprovision namespace selector ipsets that are no longer in use
-	if err := ns.deprovisionUnusedSelectors(obj.ObjectMeta.UID, nsSelectors, nil); err != nil {
+	if err := ns.nsSelectors.DeprovisionUnused(obj.ObjectMeta.UID, nsSelectors, nil); err != nil {
 		return err
 	}
 
 	// Deprovision pod selector ipsets that are no longer in use
-	if err := ns.deprovisionUnusedSelectors(obj.ObjectMeta.UID, podSelectors, nil); err != nil {
+	if err := ns.podSelectors.DeprovisionUnused(obj.ObjectMeta.UID, podSelectors, nil); err != nil {
 		return err
 	}
 
@@ -250,7 +248,7 @@ func (ns *ns) addNamespace(obj *api.Namespace) error {
 	// Add namespace ipset to matching namespace selectors
 	for _, selector := range ns.nsSelectors.entries {
 		if selector.matches(obj.ObjectMeta.Labels) {
-			if err := ns.ips.AddEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
+			if err := ns.ips.AddEntry(selector.spec.ipsetName, string(ns.ipsetName)); err != nil {
 				return err
 			}
 		}
@@ -290,12 +288,12 @@ func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 				continue
 			}
 			if oldMatch {
-				if err := ns.ips.DelEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
+				if err := ns.ips.DelEntry(selector.spec.ipsetName, string(ns.ipsetName)); err != nil {
 					return err
 				}
 			}
 			if newMatch {
-				if err := ns.ips.AddEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
+				if err := ns.ips.AddEntry(selector.spec.ipsetName, string(ns.ipsetName)); err != nil {
 					return err
 				}
 			}
@@ -311,7 +309,7 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 	// Remove namespace ipset from any matching namespace selectors
 	for _, selector := range ns.nsSelectors.entries {
 		if selector.matches(obj.ObjectMeta.Labels) {
-			if err := ns.ips.DelEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
+			if err := ns.ips.DelEntry(selector.spec.ipsetName, string(ns.ipsetName)); err != nil {
 				return err
 			}
 		}
@@ -335,7 +333,7 @@ func (ns *ns) addToMatching(obj *api.Pod) error {
 
 	for _, ps := range ns.podSelectors.entries {
 		if ps.matches(obj.ObjectMeta.Labels) {
-			if err := ns.ips.AddEntry(ps.ipsetName, obj.Status.PodIP); err != nil {
+			if err := ns.ips.AddEntry(ps.spec.ipsetName, obj.Status.PodIP); err != nil {
 				return err
 			}
 		}
@@ -351,7 +349,7 @@ func (ns *ns) delFromMatching(obj *api.Pod) error {
 
 	for _, ps := range ns.podSelectors.entries {
 		if ps.matches(obj.ObjectMeta.Labels) {
-			if err := ns.ips.DelEntry(ps.ipsetName, obj.Status.PodIP); err != nil {
+			if err := ns.ips.DelEntry(ps.spec.ipsetName, obj.Status.PodIP); err != nil {
 				return err
 			}
 		}
@@ -395,40 +393,4 @@ func isDefaultDeny(namespace *api.Namespace) bool {
 	return nnp.Ingress != nil &&
 		nnp.Ingress.Isolation != nil &&
 		*(nnp.Ingress.Isolation) == DefaultDeny
-}
-
-func (ns *ns) deprovisionUnusedSelectors(user types.UID, oldNsSelectors, newNsSelectors map[string]*selector) error {
-	for key, _ := range oldNsSelectors {
-		selector := ns.nsSelectors.entries[key]
-		if _, found := newNsSelectors[key]; !found {
-			delete(selector.policies, user)
-			if len(selector.policies) == 0 {
-				if err := selector.deprovision(ns.ips); err != nil {
-					return err
-				}
-				delete(ns.nsSelectors.entries, key)
-			}
-		}
-	}
-	return nil
-}
-
-func (ns *ns) provisionNewSelectors(user types.UID, oldNsSelectors, newNsSelectors map[string]*selector, onNewSelector selectorFn) error {
-	for key, selector := range newNsSelectors {
-		if _, found := ns.nsSelectors.entries[key]; !found {
-			if err := selector.provision(ns.ips); err != nil {
-				return err
-			}
-
-			selector.policies[user] = struct{}{}
-
-			if err := onNewSelector(selector); err != nil {
-				return err
-			}
-
-			ns.nsSelectors.entries[key] = selector
-		}
-
-	}
-	return nil
 }

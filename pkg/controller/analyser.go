@@ -8,12 +8,12 @@ import (
 	"k8s.io/kubernetes/pkg/util/intstr"
 )
 
-func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules map[ResourceKey]ResourceSpec, nsSelectors, podSelectors map[string]*selector, err error) {
-	nsSelectors = make(map[string]*selector)
-	podSelectors = make(map[string]*selector)
+func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules map[ResourceKey]ResourceSpec, nsSelectors, podSelectors map[string]*selectorSpec, err error) {
+	nsSelectors = make(map[string]*selectorSpec)
+	podSelectors = make(map[string]*selectorSpec)
 	rules = make(map[ResourceKey]ResourceSpec)
 
-	dstSelector, err := newSelector(&policy.Spec.PodSelector, ns.name, ipset.HashIP)
+	dstSelector, err := newSelectorSpec(&policy.Spec.PodSelector, ns.name, ipset.HashIP)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -48,16 +48,16 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules map[Resourc
 			// From is present and contains at least on item, this rule allows traffic only if the
 			// traffic matches at least one item in the from list.
 			for _, peer := range ingressRule.From {
-				var srcSelector *selector
+				var srcSelector *selectorSpec
 				if peer.PodSelector != nil {
-					srcSelector, err = newSelector(peer.PodSelector, ns.name, "hash:ip")
+					srcSelector, err = newSelectorSpec(peer.PodSelector, ns.name, ipset.HashIP)
 					if err != nil {
 						return nil, nil, nil, err
 					}
 					podSelectors[srcSelector.str] = srcSelector
 				}
 				if peer.NamespaceSelector != nil {
-					srcSelector, err = newSelector(peer.NamespaceSelector, "", ipset.ListSet)
+					srcSelector, err = newSelectorSpec(peer.NamespaceSelector, "", ipset.ListSet)
 					if err != nil {
 						return nil, nil, nil, err
 					}

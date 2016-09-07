@@ -28,7 +28,7 @@ func NewRuleResourceOps(ipt iptables.Interface) ResourceOps {
 	return &ruleResourceOps{ipt}
 }
 
-func NewRuleResourceSpec(proto *string, srcHost *selector, dstHost *selector, dstPort *string) ResourceSpec {
+func NewRuleResourceSpec(proto *string, srcHost *selectorSpec, dstHost *selectorSpec, dstPort *string) ResourceSpec {
 	args := []string{}
 	if proto != nil {
 		args = append(args, "-p", *proto)

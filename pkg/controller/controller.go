@@ -6,7 +6,6 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/iptables"
-	"log"
 	"sync"
 )
 
@@ -35,18 +34,21 @@ type controller struct {
 }
 
 func New(ipt iptables.Interface, ips ipset.Interface) NetworkPolicyController {
-	return &controller{
-		ipt:         ipt,
-		ips:         ips,
-		nss:         make(map[string]*ns),
-		nsSelectors: newSelectorSet()}
+	c := &controller{
+		ipt: ipt,
+		ips: ips,
+		nss: make(map[string]*ns)}
+
+	c.nsSelectors = newSelectorSet(ips, c.onNewNsSelector)
+
+	return c
 }
 
 func (npc *controller) onNewNsSelector(selector *selector) error {
 	for _, ns := range npc.nss {
 		if ns.namespace != nil {
 			if selector.matches(ns.namespace.ObjectMeta.Labels) {
-				if err := ns.ips.AddEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
+				if err := ns.ips.AddEntry(selector.spec.ipsetName, string(ns.ipsetName)); err != nil {
 					return err
 				}
 			}
@@ -58,7 +60,7 @@ func (npc *controller) onNewNsSelector(selector *selector) error {
 func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 	ns, found := npc.nss[name]
 	if !found {
-		newNs, err := newNS(name, npc.ipt, npc.ips, npc.nsSelectors, npc.onNewNsSelector)
+		newNs, err := newNS(name, npc.ipt, npc.ips, npc.nsSelectors)
 		if err != nil {
 			return err
 		}
@@ -118,7 +120,6 @@ func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPol
 	defer npc.Unlock()
 
 	return npc.withNS(oldObj.ObjectMeta.Namespace, func(ns *ns) error {
-		log.Println("Updating network policy from %v to %v", oldObj, newObj)
 		return errors.Wrap(ns.updateNetworkPolicy(oldObj, newObj), "update network policy")
 	})
 }
