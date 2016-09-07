@@ -2,7 +2,7 @@ package controller
 
 import (
 	"encoding/json"
-	"github.com/pkg/errors"
+	log "github.com/Sirupsen/logrus"
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
@@ -27,22 +27,21 @@ type ns struct {
 }
 
 func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors *selectorSet) (*ns, error) {
-	ipsetName := ipset.Name("weave-" + shortName(name))
-	if err := ips.Create(ipsetName, ipset.HashIP); err != nil {
-		return nil, err
-	}
-
 	n := &ns{
 		ipt:         ipt,
 		ips:         ips,
 		name:        name,
 		pods:        make(map[types.UID]*api.Pod),
 		policies:    make(map[types.UID]*extensions.NetworkPolicy),
-		ipsetName:   ipsetName,
+		ipsetName:   ipset.Name("weave-" + shortName(name)),
 		nsSelectors: nsSelectors,
 		rules:       newRuleSet(ipt)}
 
 	n.podSelectors = newSelectorSet(ips, n.onNewPodSelector)
+
+	if err := ips.Create(n.ipsetName, ipset.HashIP); err != nil {
+		return nil, err
+	}
 
 	return n, nil
 }
@@ -234,13 +233,16 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	return nil
 }
 
+func bypassRule(nsIpsetName ipset.Name) []string {
+	return []string{"-m", "set", "--match-set", string(nsIpsetName), "dst", "-j", "ACCEPT"}
+}
+
 func (ns *ns) addNamespace(obj *api.Namespace) error {
 	ns.namespace = obj
 
 	// Insert a rule to bypass policies if namespace is DefaultAllow
 	if !isDefaultDeny(obj) {
-		if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain,
-			"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
+		if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain, bypassRule(ns.ipsetName)...); err != nil {
 			return err
 		}
 	}
@@ -266,14 +268,12 @@ func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 
 	if oldDefaultDeny != newDefaultDeny {
 		if oldDefaultDeny {
-			if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain,
-				"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
+			if _, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain, bypassRule(ns.ipsetName)...); err != nil {
 				return err
 			}
 		}
 		if newDefaultDeny {
-			if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain,
-				"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
+			if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain, bypassRule(ns.ipsetName)...); err != nil {
 				return err
 			}
 		}
@@ -317,8 +317,7 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 
 	// Remove bypass rule
 	if !isDefaultDeny(obj) {
-		if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain,
-			"-m", "set", "--match-set", string(ns.ipsetName), "dst", "-j", "ACCEPT"); err != nil {
+		if err := ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain, bypassRule(ns.ipsetName)...); err != nil {
 			return err
 		}
 	}
@@ -328,7 +327,7 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 
 func (ns *ns) addToMatching(obj *api.Pod) error {
 	if err := ns.ips.AddEntry(ns.ipsetName, obj.Status.PodIP); err != nil {
-		return errors.Wrap(err, "addToMatching")
+		return err
 	}
 
 	for _, ps := range ns.podSelectors.entries {
@@ -385,8 +384,8 @@ func isDefaultDeny(namespace *api.Namespace) bool {
 
 	var nnp NamespaceNetworkPolicy
 	if err := json.Unmarshal([]byte(nnpJson), &nnp); err != nil {
+		log.Warn("Ignoring network policy annotation: unmarshal failed:", err)
 		// If we can't understand the annotation, behave as if it isn't present
-		// TODO log unmarshal failure
 		return false
 	}
 
