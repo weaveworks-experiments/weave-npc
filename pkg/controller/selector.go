@@ -58,7 +58,7 @@ func newSelectorSet(ips ipset.Interface, onNewSelector selectorFn) *selectorSet 
 		entries:       make(map[string]*selector)}
 }
 
-func (ss *selectorSet) DeprovisionUnused(user types.UID, current, desired map[string]*selectorSpec) error {
+func (ss *selectorSet) deprovision(user types.UID, current, desired map[string]*selectorSpec) error {
 	for key, spec := range current {
 		if _, found := desired[key]; !found {
 			delete(ss.users[key], user)
@@ -74,7 +74,7 @@ func (ss *selectorSet) DeprovisionUnused(user types.UID, current, desired map[st
 	return nil
 }
 
-func (ss *selectorSet) ProvisionNew(user types.UID, current, desired map[string]*selectorSpec) error {
+func (ss *selectorSet) provision(user types.UID, current, desired map[string]*selectorSpec) error {
 	for key, spec := range desired {
 		if _, found := current[key]; !found {
 			if _, found := ss.users[key]; !found {

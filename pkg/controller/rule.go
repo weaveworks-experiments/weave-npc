@@ -40,7 +40,7 @@ func newRuleSet(ipt iptables.Interface) *ruleSet {
 	return &ruleSet{ipt, make(map[string]map[types.UID]struct{})}
 }
 
-func (rs *ruleSet) DeprovisionUnused(user types.UID, current, desired map[string]*ruleSpec) error {
+func (rs *ruleSet) deprovision(user types.UID, current, desired map[string]*ruleSpec) error {
 	for key, spec := range current {
 		if _, found := desired[key]; !found {
 			delete(rs.users[key], user)
@@ -56,7 +56,7 @@ func (rs *ruleSet) DeprovisionUnused(user types.UID, current, desired map[string
 	return nil
 }
 
-func (rs *ruleSet) ProvisionNew(user types.UID, current, desired map[string]*ruleSpec) error {
+func (rs *ruleSet) provision(user types.UID, current, desired map[string]*ruleSpec) error {
 	for key, spec := range desired {
 		if _, found := current[key]; !found {
 			if _, found := rs.users[key]; !found {

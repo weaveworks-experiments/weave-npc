@@ -141,17 +141,17 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	}
 
 	// Provision any missing namespace selector ipsets; reference existing
-	if err := ns.nsSelectors.ProvisionNew(obj.ObjectMeta.UID, nil, nsSelectors); err != nil {
+	if err := ns.nsSelectors.provision(obj.ObjectMeta.UID, nil, nsSelectors); err != nil {
 		return err
 	}
 
 	// Provision any missing pod selector ipsets; reference existing
-	if err := ns.podSelectors.ProvisionNew(obj.ObjectMeta.UID, nil, podSelectors); err != nil {
+	if err := ns.podSelectors.provision(obj.ObjectMeta.UID, nil, podSelectors); err != nil {
 		return err
 	}
 
 	// Reference iptables rules, creating if necessary
-	if err := ns.rules.ProvisionNew(obj.ObjectMeta.UID, nil, rules); err != nil {
+	if err := ns.rules.provision(obj.ObjectMeta.UID, nil, rules); err != nil {
 		return err
 	}
 
@@ -174,32 +174,32 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 	}
 
 	// Deprovision unused rules
-	if err := ns.rules.DeprovisionUnused(oldObj.ObjectMeta.UID, oldRules, newRules); err != nil {
+	if err := ns.rules.deprovision(oldObj.ObjectMeta.UID, oldRules, newRules); err != nil {
 		return err
 	}
 
 	// Deprovision namespace selector ipsets that are no longer in use
-	if err := ns.nsSelectors.DeprovisionUnused(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors); err != nil {
+	if err := ns.nsSelectors.deprovision(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors); err != nil {
 		return err
 	}
 
 	// Deprovision pod selector ipsets that are no longer in use
-	if err := ns.podSelectors.DeprovisionUnused(oldObj.ObjectMeta.UID, oldPodSelectors, newPodSelectors); err != nil {
+	if err := ns.podSelectors.deprovision(oldObj.ObjectMeta.UID, oldPodSelectors, newPodSelectors); err != nil {
 		return err
 	}
 
 	// Provision any missing namespace selector ipsets; reference existing
-	if err := ns.nsSelectors.ProvisionNew(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors); err != nil {
+	if err := ns.nsSelectors.provision(oldObj.ObjectMeta.UID, oldNsSelectors, newNsSelectors); err != nil {
 		return err
 	}
 
 	// Provision any missing pod selector ipsets; reference existing
-	if err := ns.podSelectors.ProvisionNew(oldObj.ObjectMeta.UID, oldPodSelectors, newNsSelectors); err != nil {
+	if err := ns.podSelectors.provision(oldObj.ObjectMeta.UID, oldPodSelectors, newNsSelectors); err != nil {
 		return err
 	}
 
 	// Reference iptables rules, creating if necessary
-	if err := ns.rules.ProvisionNew(oldObj.ObjectMeta.UID, oldRules, newRules); err != nil {
+	if err := ns.rules.provision(oldObj.ObjectMeta.UID, oldRules, newRules); err != nil {
 		return err
 	}
 
@@ -216,17 +216,17 @@ func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	}
 
 	// Deprovision unused rules
-	if err := ns.rules.DeprovisionUnused(obj.ObjectMeta.UID, rules, nil); err != nil {
+	if err := ns.rules.deprovision(obj.ObjectMeta.UID, rules, nil); err != nil {
 		return err
 	}
 
 	// Deprovision namespace selector ipsets that are no longer in use
-	if err := ns.nsSelectors.DeprovisionUnused(obj.ObjectMeta.UID, nsSelectors, nil); err != nil {
+	if err := ns.nsSelectors.deprovision(obj.ObjectMeta.UID, nsSelectors, nil); err != nil {
 		return err
 	}
 
 	// Deprovision pod selector ipsets that are no longer in use
-	if err := ns.podSelectors.DeprovisionUnused(obj.ObjectMeta.UID, podSelectors, nil); err != nil {
+	if err := ns.podSelectors.deprovision(obj.ObjectMeta.UID, podSelectors, nil); err != nil {
 		return err
 	}
 
