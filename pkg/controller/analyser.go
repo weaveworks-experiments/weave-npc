@@ -21,7 +21,7 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	podSelectors[dstSelector.str] = dstSelector
+	podSelectors[dstSelector.key] = dstSelector
 
 	for _, ingressRule := range policy.Spec.Ingress {
 		if ingressRule.Ports != nil && len(ingressRule.Ports) == 0 {
@@ -58,14 +58,14 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (
 					if err != nil {
 						return nil, nil, nil, err
 					}
-					podSelectors[srcSelector.str] = srcSelector
+					podSelectors[srcSelector.key] = srcSelector
 				}
 				if peer.NamespaceSelector != nil {
 					srcSelector, err = newSelectorSpec(peer.NamespaceSelector, "", ipset.ListSet)
 					if err != nil {
 						return nil, nil, nil, err
 					}
-					nsSelectors[srcSelector.str] = srcSelector
+					nsSelectors[srcSelector.key] = srcSelector
 				}
 
 				if ingressRule.Ports == nil {

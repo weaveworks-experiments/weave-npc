@@ -10,7 +10,7 @@ import (
 type selectorSpec struct {
 	json *unversioned.LabelSelector // JSON representation (from API server)
 	dom  labels.Selector            // k8s domain object (for matching)
-	str  string                     // string representation (for hash keying/equality comparison)
+	key  string                     // string representation (for hash keying/equality comparison)
 
 	ipsetType ipset.Type // type of ipset to provision
 	ipsetName ipset.Name // generated ipset name
@@ -21,16 +21,16 @@ func newSelectorSpec(json *unversioned.LabelSelector, nsName string, ipsetType i
 	if err != nil {
 		return nil, err
 	}
-	str := dom.String()
+	key := dom.String()
 	return &selectorSpec{
 		json:      json,
 		ipsetType: ipsetType,
 		dom:       dom,
-		str:       str,
+		key:       key,
 		// We prefix the selector string with the namespace name when generating
 		// the shortname because you can specify the same selector in multiple
 		// namespaces - we need those to map to distinct ipsets
-		ipsetName: ipset.Name("weave-" + shortName(nsName+":"+str))}, nil
+		ipsetName: ipset.Name("weave-" + shortName(nsName+":"+key))}, nil
 }
 
 type selector struct {
