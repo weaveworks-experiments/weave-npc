@@ -66,8 +66,10 @@ func (s *selector) deprovision(ips ipset.Interface) error {
 	return ips.Destroy(s.ipsetName)
 }
 
-type selectorSet map[string]*selector
+type selectorSet struct {
+	entries map[string]*selector
+}
 
-func newSelectorSet() selectorSet {
-	return selectorSet(make(map[string]*selector))
+func newSelectorSet() *selectorSet {
+	return &selectorSet{make(map[string]*selector)}
 }

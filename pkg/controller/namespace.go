@@ -25,12 +25,12 @@ type ns struct {
 
 	onNewNsSelector selectorFn
 
-	podSelectors selectorSet // selector string -> podSelector
-	nsSelectors  selectorSet // selector string -> nsSelector
+	podSelectors *selectorSet // selector string -> podSelector
+	nsSelectors  *selectorSet // selector string -> nsSelector
 	rules        ResourceManager
 }
 
-func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors selectorSet, onNewNsSelector selectorFn) (*ns, error) {
+func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors *selectorSet, onNewNsSelector selectorFn) (*ns, error) {
 	ipsetName := ipset.Name("weave-" + shortName(name))
 	if err := ips.Create(ipsetName, ipset.HashIP); err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (ns *ns) updatePod(oldObj, newObj *api.Pod) error {
 	if !equals(oldObj.ObjectMeta.Labels, newObj.ObjectMeta.Labels) ||
 		oldObj.Status.PodIP != newObj.Status.PodIP {
 
-		for _, ps := range ns.podSelectors {
+		for _, ps := range ns.podSelectors.entries {
 			oldMatch := ps.matches(oldObj.ObjectMeta.Labels)
 			newMatch := ps.matches(newObj.ObjectMeta.Labels)
 			if oldMatch == newMatch && oldObj.Status.PodIP == newObj.Status.PodIP {
@@ -248,7 +248,7 @@ func (ns *ns) addNamespace(obj *api.Namespace) error {
 	}
 
 	// Add namespace ipset to matching namespace selectors
-	for _, selector := range ns.nsSelectors {
+	for _, selector := range ns.nsSelectors.entries {
 		if selector.matches(obj.ObjectMeta.Labels) {
 			if err := ns.ips.AddEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
 				return err
@@ -283,7 +283,7 @@ func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 
 	// Re-evaluate namespace selector membership if labels have changed
 	if !equals(oldObj.ObjectMeta.Labels, newObj.ObjectMeta.Labels) {
-		for _, selector := range ns.nsSelectors {
+		for _, selector := range ns.nsSelectors.entries {
 			oldMatch := selector.matches(oldObj.ObjectMeta.Labels)
 			newMatch := selector.matches(newObj.ObjectMeta.Labels)
 			if oldMatch == newMatch {
@@ -309,7 +309,7 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 	ns.namespace = nil
 
 	// Remove namespace ipset from any matching namespace selectors
-	for _, selector := range ns.nsSelectors {
+	for _, selector := range ns.nsSelectors.entries {
 		if selector.matches(obj.ObjectMeta.Labels) {
 			if err := ns.ips.DelEntry(selector.ipsetName, string(ns.ipsetName)); err != nil {
 				return err
@@ -333,7 +333,7 @@ func (ns *ns) addToMatching(obj *api.Pod) error {
 		return errors.Wrap(err, "addToMatching")
 	}
 
-	for _, ps := range ns.podSelectors {
+	for _, ps := range ns.podSelectors.entries {
 		if ps.matches(obj.ObjectMeta.Labels) {
 			if err := ns.ips.AddEntry(ps.ipsetName, obj.Status.PodIP); err != nil {
 				return err
@@ -349,7 +349,7 @@ func (ns *ns) delFromMatching(obj *api.Pod) error {
 		return err
 	}
 
-	for _, ps := range ns.podSelectors {
+	for _, ps := range ns.podSelectors.entries {
 		if ps.matches(obj.ObjectMeta.Labels) {
 			if err := ns.ips.DelEntry(ps.ipsetName, obj.Status.PodIP); err != nil {
 				return err
@@ -399,14 +399,14 @@ func isDefaultDeny(namespace *api.Namespace) bool {
 
 func (ns *ns) deprovisionUnusedSelectors(user types.UID, oldNsSelectors, newNsSelectors map[string]*selector) error {
 	for key, _ := range oldNsSelectors {
-		selector := ns.nsSelectors[key]
+		selector := ns.nsSelectors.entries[key]
 		if _, found := newNsSelectors[key]; !found {
 			delete(selector.policies, user)
 			if len(selector.policies) == 0 {
 				if err := selector.deprovision(ns.ips); err != nil {
 					return err
 				}
-				delete(ns.nsSelectors, key)
+				delete(ns.nsSelectors.entries, key)
 			}
 		}
 	}
@@ -415,7 +415,7 @@ func (ns *ns) deprovisionUnusedSelectors(user types.UID, oldNsSelectors, newNsSe
 
 func (ns *ns) provisionNewSelectors(user types.UID, oldNsSelectors, newNsSelectors map[string]*selector, onNewSelector selectorFn) error {
 	for key, selector := range newNsSelectors {
-		if _, found := ns.nsSelectors[key]; !found {
+		if _, found := ns.nsSelectors.entries[key]; !found {
 			if err := selector.provision(ns.ips); err != nil {
 				return err
 			}
@@ -426,7 +426,7 @@ func (ns *ns) provisionNewSelectors(user types.UID, oldNsSelectors, newNsSelecto
 				return err
 			}
 
-			ns.nsSelectors[key] = selector
+			ns.nsSelectors.entries[key] = selector
 		}
 
 	}

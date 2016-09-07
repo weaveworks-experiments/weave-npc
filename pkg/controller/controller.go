@@ -31,7 +31,7 @@ type controller struct {
 	ips ipset.Interface
 
 	nss         map[string]*ns // ns name -> ns struct
-	nsSelectors selectorSet    // selector string -> nsSelector
+	nsSelectors *selectorSet   // selector string -> nsSelector
 }
 
 func New(ipt iptables.Interface, ips ipset.Interface) NetworkPolicyController {
