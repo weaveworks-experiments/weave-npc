@@ -21,9 +21,9 @@ type ns struct {
 
 	ipsetName ipset.Name // Name of hash:ip ipset storing pod IPs in this namespace
 
-	nsSelectors  *selectorSet // selector string -> nsSelector
-	podSelectors *selectorSet // selector string -> podSelector
-	rules        ResourceManager
+	nsSelectors  *selectorSet
+	podSelectors *selectorSet
+	rules        *ruleSet
 }
 
 func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors *selectorSet) (*ns, error) {
@@ -40,7 +40,7 @@ func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors
 		policies:    make(map[types.UID]*extensions.NetworkPolicy),
 		ipsetName:   ipsetName,
 		nsSelectors: nsSelectors,
-		rules:       NewResourceManager(NewRuleResourceOps(ipt))}
+		rules:       newRuleSet(ipt)}
 
 	n.podSelectors = newSelectorSet(ips, n.onNewPodSelector)
 

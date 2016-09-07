@@ -77,7 +77,7 @@ func (ss *selectorSet) DeprovisionUnused(user types.UID, current, desired map[st
 func (ss *selectorSet) ProvisionNew(user types.UID, current, desired map[string]*selectorSpec) error {
 	for key, spec := range desired {
 		if _, found := current[key]; !found {
-			if _, found := ss.entries[key]; !found {
+			if _, found := ss.users[key]; !found {
 				if err := ss.ips.Create(spec.ipsetName, spec.ipsetType); err != nil {
 					return err
 				}

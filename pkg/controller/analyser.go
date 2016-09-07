@@ -8,10 +8,14 @@ import (
 	"k8s.io/kubernetes/pkg/util/intstr"
 )
 
-func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules map[ResourceKey]ResourceSpec, nsSelectors, podSelectors map[string]*selectorSpec, err error) {
+func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (
+	rules map[string]*ruleSpec,
+	nsSelectors, podSelectors map[string]*selectorSpec,
+	err error) {
+
 	nsSelectors = make(map[string]*selectorSpec)
 	podSelectors = make(map[string]*selectorSpec)
-	rules = make(map[ResourceKey]ResourceSpec)
+	rules = make(map[string]*ruleSpec)
 
 	dstSelector, err := newSelectorSpec(&policy.Spec.PodSelector, ns.name, ipset.HashIP)
 	if err != nil {
@@ -34,14 +38,14 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules map[Resourc
 			// From is not provided, this rule matches all sources (traffic not restricted by source).
 			if ingressRule.Ports == nil {
 				// Ports is not provided, this rule matches all ports (traffic not restricted by port).
-				rule := NewRuleResourceSpec(nil, nil, dstSelector, nil)
-				rules[rule.Key()] = rule
+				rule := newRuleSpec(nil, nil, dstSelector, nil)
+				rules[rule.key] = rule
 			} else {
 				// Ports is present and contains at least one item, then this rule allows traffic
 				// only if the traffic matches at least one port in the ports list.
 				withNormalisedProtoAndPort(ingressRule.Ports, func(proto, port string) {
-					rule := NewRuleResourceSpec(&proto, nil, dstSelector, &port)
-					rules[rule.Key()] = rule
+					rule := newRuleSpec(&proto, nil, dstSelector, &port)
+					rules[rule.key] = rule
 				})
 			}
 		} else {
@@ -66,14 +70,14 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (rules map[Resourc
 
 				if ingressRule.Ports == nil {
 					// Ports is not provided, this rule matches all ports (traffic not restricted by port).
-					rule := NewRuleResourceSpec(nil, srcSelector, dstSelector, nil)
-					rules[rule.Key()] = rule
+					rule := newRuleSpec(nil, srcSelector, dstSelector, nil)
+					rules[rule.key] = rule
 				} else {
 					// Ports is present and contains at least one item, then this rule allows traffic
 					// only if the traffic matches at least one port in the ports list.
 					withNormalisedProtoAndPort(ingressRule.Ports, func(proto, port string) {
-						rule := NewRuleResourceSpec(&proto, srcSelector, dstSelector, &port)
-						rules[rule.Key()] = rule
+						rule := newRuleSpec(&proto, srcSelector, dstSelector, &port)
+						rules[rule.key] = rule
 					})
 				}
 			}
