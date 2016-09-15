@@ -1,6 +1,7 @@
 package controller
 
 import (
+	log "github.com/Sirupsen/logrus"
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/labels"
@@ -41,10 +42,12 @@ func (s *selector) matches(labelMap map[string]string) bool {
 }
 
 func (s *selector) addEntry(entry string) error {
+	log.Infof("adding entry %s to %s", entry, s.spec.ipsetName)
 	return s.ips.AddEntry(s.spec.ipsetName, entry)
 }
 
 func (s *selector) delEntry(entry string) error {
+	log.Infof("deleting entry %s from %s", entry, s.spec.ipsetName)
 	return s.ips.DelEntry(s.spec.ipsetName, entry)
 }
 
@@ -92,6 +95,7 @@ func (ss *selectorSet) deprovision(user types.UID, current, desired map[string]*
 		if _, found := desired[key]; !found {
 			delete(ss.users[key], user)
 			if len(ss.users[key]) == 0 {
+				log.Infof("destroying ipset: %#v", spec)
 				if err := ss.ips.Destroy(spec.ipsetName); err != nil {
 					return err
 				}
@@ -107,6 +111,7 @@ func (ss *selectorSet) provision(user types.UID, current, desired map[string]*se
 	for key, spec := range desired {
 		if _, found := current[key]; !found {
 			if _, found := ss.users[key]; !found {
+				log.Infof("creating ipset: %#v", spec)
 				if err := ss.ips.Create(spec.ipsetName, spec.ipsetType); err != nil {
 					return err
 				}

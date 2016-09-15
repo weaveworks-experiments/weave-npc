@@ -1,6 +1,7 @@
 package controller
 
 import (
+	log "github.com/Sirupsen/logrus"
 	"k8s.io/kubernetes/pkg/types"
 	"k8s.io/kubernetes/pkg/util/iptables"
 	"strings"
@@ -45,6 +46,7 @@ func (rs *ruleSet) deprovision(user types.UID, current, desired map[string]*rule
 		if _, found := desired[key]; !found {
 			delete(rs.users[key], user)
 			if len(rs.users[key]) == 0 {
+				log.Infof("deleting rule: %v", spec.args)
 				if err := rs.ipt.DeleteRule(iptables.TableFilter, IngressChain, spec.args...); err != nil {
 					return err
 				}
@@ -60,6 +62,7 @@ func (rs *ruleSet) provision(user types.UID, current, desired map[string]*ruleSp
 	for key, spec := range desired {
 		if _, found := current[key]; !found {
 			if _, found := rs.users[key]; !found {
+				log.Infof("adding rule: %v", spec.args)
 				_, err := rs.ipt.EnsureRule(iptables.Append, iptables.TableFilter, IngressChain, spec.args...)
 				if err != nil {
 					return err

@@ -1,6 +1,7 @@
 package main
 
 import (
+	log "github.com/Sirupsen/logrus"
 	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api"
@@ -14,7 +15,6 @@ import (
 	"k8s.io/kubernetes/pkg/util/exec"
 	"k8s.io/kubernetes/pkg/util/iptables"
 	"k8s.io/kubernetes/pkg/util/wait"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -100,6 +100,7 @@ func resetIPSets(ips ipset.Interface) error {
 }
 
 func main() {
+	log.Infof("Starting")
 
 	client, err := unversioned.NewInCluster()
 	if err != nil {
@@ -156,5 +157,5 @@ func main() {
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	log.Fatal(<-signals)
+	log.Fatalf("Exiting: %v", <-signals)
 }
