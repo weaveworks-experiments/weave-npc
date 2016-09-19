@@ -66,25 +66,35 @@ Static configuration:
 
 ```
 iptables -A WEAVE-NPC -m state --state RELATED,ESTABLISHED -j ACCEPT
-#iptables -A WEAVE-NPC -m state --state NEW -m set ! --match-set $ALLNSIPSET dst -j ACCEPT
 iptables -A WEAVE-NPC -m state --state NEW -j WEAVE-NPC-DEFAULT
 iptables -A WEAVE-NPC -m state --state NEW -j WEAVE-NPC-INGRESS
-iptables -A WEAVE-NPC -j DROP
 ```
 
-# [WIP] Steering traffic into the policy engine
+# Steering traffic into the policy engine
 
 To direct traffic into the policy engine:
 
-iptables -A FORWARD -i weave -o weave -j WEAVE-NPC
+iptables -A FORWARD -o weave -m physdev ! --physdev-out vethwe-bridge -j WEAVE-NPC
+iptables -A FORWARD -o weave -m physdev ! --physdev-out vethwe-bridge -j DROP
 
-Note this only affects traffic which is _forwarded over_ the specified
-bridge device. This rule will not match:
+Note this only affects traffic which egresses the bridge on a physical
+port which is not the Weave Net router - in other words, it is
+destined for an application container veth. The following traffic is
+affected:
 
-* Traffic which originates on the node itself (e.g. kubelet
-  healthchecks) - this goes via the OUTPUT/INPUT chains
-* Traffic originating in a container with a non-container destination
-  (typically e.g `-i weave -o eth0` with masquerading)
-* Traffic originating from an off-node non-container source which is
-  then DNATted to a container IP (typically e.g. `-i eth0 -o weave`
-  with DNAT)
+* Traffic bridged between local application containers
+* Traffic bridged from the router to a local application container
+* Traffic originating from the internet destined for nodeports - this
+  is routed via the FORWARD chain to a container pod IP after DNAT
+
+The following traffic is NOT affected:
+
+* Traffic bridged from a local application container to the router
+* Traffic originating from processes in the host network namespace
+  (e.g. kubelet health checks)
+* Traffic routed from an application container to the internet
+
+See these resources for helpful context:
+
+* http://ebtables.netfilter.org/br_fw_ia/br_fw_ia.html
+* https://commons.wikimedia.org/wiki/File:Netfilter-packet-flow.svg
