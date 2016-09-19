@@ -20,6 +20,8 @@ import (
 	"syscall"
 )
 
+var version = "unreleased)"
+
 func handleError(err error) {
 	if err != nil {
 		log.Fatal(err)
@@ -100,7 +102,7 @@ func resetIPSets(ips ipset.Interface) error {
 }
 
 func main() {
-	log.Infof("Starting")
+	log.Infof("Starting Weaveworks NPC %s", version)
 
 	client, err := unversioned.NewInCluster()
 	if err != nil {
