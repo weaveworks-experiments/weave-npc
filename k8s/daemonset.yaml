@@ -12,6 +12,16 @@ spec:
       namespace: kube-system
       labels:
         k8s-app: weave-npc
+      annotations:
+        scheduler.alpha.kubernetes.io/tolerations: |
+          [
+            {   
+              "key": "dedicated",
+              "operator": "Equal",
+              "value": "master",
+              "effect": "NoSchedule"
+            }
+          ]
     spec:
       hostPID: true
       hostNetwork: true
