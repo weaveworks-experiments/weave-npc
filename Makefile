@@ -5,15 +5,17 @@ all: image
 
 clean:
 	go clean
+	rm -f cmd/weave-npc/weave-npc
 	rm -rf ./build
 
 godeps=$(shell go get $1 && go list -f '{{join .Deps "\n"}}' $1 | grep -v /vendor/ | xargs go list -f '{{if not .Standard}}{{ $$dep := . }}{{range .GoFiles}}{{$$dep.Dir}}/{{.}} {{end}}{{end}}')
 
 DEPS=$(call godeps,./cmd/weave-npc)
+VERSION=git-$(shell git rev-parse --short=12 HEAD)
 
 cmd/weave-npc/weave-npc: $(DEPS)
 cmd/weave-npc/weave-npc: cmd/weave-npc/*.go
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $@ cmd/weave-npc/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$(VERSION)" -o $@ cmd/weave-npc/main.go
 
 build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc
 	mkdir -p build
