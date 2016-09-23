@@ -79,11 +79,6 @@ func resetIPTables(ipt iptables.Interface) error {
 		return err
 	}
 
-	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
-		"-j", "DROP"); err != nil {
-		return err
-	}
-
 	return nil
 }
 
