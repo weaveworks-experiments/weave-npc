@@ -2,14 +2,16 @@ package controller
 
 import (
 	"encoding/json"
+
 	log "github.com/Sirupsen/logrus"
-	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/types"
 	"k8s.io/kubernetes/pkg/util/iptables"
 	"k8s.io/kubernetes/pkg/util/uuid"
+
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
 type ns struct {

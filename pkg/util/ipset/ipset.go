@@ -1,8 +1,9 @@
 package ipset
 
 import (
-	"github.com/pkg/errors"
 	"os/exec"
+
+	"github.com/pkg/errors"
 )
 
 type Name string

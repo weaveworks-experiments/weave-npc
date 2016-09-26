@@ -1,13 +1,15 @@
 package controller
 
 import (
+	"sync"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/iptables"
-	"sync"
+
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
 type NetworkPolicyController interface {

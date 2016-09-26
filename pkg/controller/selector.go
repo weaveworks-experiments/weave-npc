@@ -2,10 +2,11 @@ package controller
 
 import (
 	log "github.com/Sirupsen/logrus"
-	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/types"
+
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
 type selectorSpec struct {

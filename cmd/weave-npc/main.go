@@ -1,9 +1,11 @@
 package main
 
 import (
+	"os"
+	"os/signal"
+	"syscall"
+
 	log "github.com/Sirupsen/logrus"
-	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
-	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/client/cache"
@@ -15,9 +17,9 @@ import (
 	"k8s.io/kubernetes/pkg/util/exec"
 	"k8s.io/kubernetes/pkg/util/iptables"
 	"k8s.io/kubernetes/pkg/util/wait"
-	"os"
-	"os/signal"
-	"syscall"
+
+	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
 var version = "(unreleased)"

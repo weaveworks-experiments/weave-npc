@@ -2,10 +2,12 @@ package controller
 
 import (
 	"fmt"
-	"github.com/weaveworks/weave-npc/pkg/util/ipset"
+
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/util/intstr"
+
+	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
 func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (
