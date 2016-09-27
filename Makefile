@@ -1,5 +1,7 @@
 .DEFAULT: all
-.PHONY: all clean image publish-image minikube-pubish kube-deploy kube-redeploy kube-unedeploy
+.PHONY: all clean image publish-image minikube-publish kube-deploy kube-redeploy kube-unedeploy
+
+IMAGE_TAG=latest
 
 all: image
 
@@ -20,16 +22,16 @@ cmd/weave-npc/weave-npc: cmd/weave-npc/*.go
 build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc
 	mkdir -p build
 	cp $^ build
-	sudo docker build -t weaveworks/weave-npc -f build/Dockerfile ./build
+	sudo docker build -t weaveworks/weave-npc:$(IMAGE_TAG) -f build/Dockerfile ./build
 	touch $@
 
 image: build/.image.done
 
 publish-image: image
-	sudo docker push weaveworks/weave-npc
+	sudo docker push weaveworks/weave-npc:$(IMAGE_TAG)
 
 minikube-publish: image
-	sudo docker save weaveworks/weave-npc | (eval $$(minikube docker-env) && docker load)
+	sudo docker save weaveworks/weave-npc:$(IMAGE_TAG) | (eval $$(minikube docker-env) && docker load)
 
 kube-deploy: all
 	kubectl create -f k8s/daemonset.yaml
