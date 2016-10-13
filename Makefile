@@ -20,7 +20,7 @@ cmd/weave-npc/weave-npc: $(DEPS)
 cmd/weave-npc/weave-npc: cmd/weave-npc/*.go
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$(VERSION)" -o $@ cmd/weave-npc/main.go
 
-build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc
+build/.image.done: cmd/weave-npc/Dockerfile cmd/weave-npc/weave-npc cmd/weave-npc/ulogd.conf
 	mkdir -p build
 	cp $^ build
 	sudo docker build -t $(DH_ORG)/weave-npc:$(IMAGE_TAG) -f build/Dockerfile ./build
