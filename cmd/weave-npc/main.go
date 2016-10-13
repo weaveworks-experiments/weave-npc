@@ -19,6 +19,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/wait"
 
 	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
+	"github.com/weaveworks/weave-npc/pkg/ulogd"
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
@@ -100,6 +101,10 @@ func resetIPSets(ips ipset.Interface) error {
 
 func main() {
 	log.Infof("Starting Weaveworks NPC %s", version)
+
+	if err := ulogd.Start(); err != nil {
+		log.Fatalf("Failed to start ulogd: %v", err)
+	}
 
 	client, err := unversioned.NewInCluster()
 	if err != nil {
