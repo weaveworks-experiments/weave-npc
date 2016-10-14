@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/client/cache"
@@ -19,11 +20,15 @@ import (
 	"k8s.io/kubernetes/pkg/util/wait"
 
 	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
+	"github.com/weaveworks/weave-npc/pkg/metrics"
 	"github.com/weaveworks/weave-npc/pkg/ulogd"
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
-var version = "(unreleased)"
+var (
+	version     = "(unreleased)"
+	metricsAddr string
+)
 
 func handleError(err error) {
 	if err != nil {
@@ -99,8 +104,12 @@ func resetIPSets(ips ipset.Interface) error {
 	return nil
 }
 
-func main() {
+func root(cmd *cobra.Command, args []string) {
 	log.Infof("Starting Weaveworks NPC %s", version)
+
+	if err := metrics.Start(metricsAddr); err != nil {
+		log.Fatalf("Failed to start metrics: %v", err)
+	}
 
 	if err := ulogd.Start(); err != nil {
 		log.Fatalf("Failed to start ulogd: %v", err)
@@ -162,4 +171,17 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	log.Fatalf("Exiting: %v", <-signals)
+}
+
+func main() {
+	rootCmd := &cobra.Command{
+		Use:   "weave-npc",
+		Short: "Weaveworks Kubernetes Network Policy Controller",
+		Run:   root}
+
+	rootCmd.PersistentFlags().StringVar(&metricsAddr, "metrics-addr", ":8686", "metrics server bind address")
+
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }
