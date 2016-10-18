@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 	coreapi "k8s.io/client-go/pkg/api/v1"
@@ -15,9 +16,6 @@ import (
 	"k8s.io/client-go/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kubernetes/pkg/util/dbus"
-	"k8s.io/kubernetes/pkg/util/exec"
-	"k8s.io/kubernetes/pkg/util/iptables"
 
 	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
 	"github.com/weaveworks/weave-npc/pkg/metrics"
@@ -43,46 +41,32 @@ func makeController(getter cache.Getter, resource string,
 	return controller
 }
 
-func ensureFlushedChain(ipt iptables.Interface, chain iptables.Chain) error {
-	needFlush, err := ipt.EnsureChain(iptables.TableFilter, chain)
-	if err != nil {
-		return err
-	}
-
-	if needFlush {
-		if err := ipt.FlushChain(iptables.TableFilter, chain); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func resetIPTables(ipt iptables.Interface) error {
+func resetIPTables(ipt *iptables.IPTables) error {
 	// Flush chains first so there are no refs to extant ipsets
-	if err := ensureFlushedChain(ipt, weavenpc.IngressChain); err != nil {
+	if err := ipt.ClearChain(weavenpc.TableFilter, weavenpc.IngressChain); err != nil {
 		return err
 	}
 
-	if err := ensureFlushedChain(ipt, weavenpc.DefaultChain); err != nil {
+	if err := ipt.ClearChain(weavenpc.TableFilter, weavenpc.DefaultChain); err != nil {
 		return err
 	}
 
-	if err := ensureFlushedChain(ipt, weavenpc.MainChain); err != nil {
+	if err := ipt.ClearChain(weavenpc.TableFilter, weavenpc.MainChain); err != nil {
 		return err
 	}
 
 	// Configure main chain static rules
-	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
+	if err := ipt.Append(weavenpc.TableFilter, weavenpc.MainChain,
 		"-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"); err != nil {
 		return err
 	}
 
-	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
+	if err := ipt.Append(weavenpc.TableFilter, weavenpc.MainChain,
 		"-m", "state", "--state", "NEW", "-j", string(weavenpc.DefaultChain)); err != nil {
 		return err
 	}
 
-	if _, err := ipt.EnsureRule(iptables.Append, iptables.TableFilter, weavenpc.MainChain,
+	if err := ipt.Append(weavenpc.TableFilter, weavenpc.MainChain,
 		"-m", "state", "--state", "NEW", "-j", string(weavenpc.IngressChain)); err != nil {
 		return err
 	}
@@ -125,7 +109,11 @@ func root(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	ipt := iptables.New(exec.New(), dbus.New(), iptables.ProtocolIpv4)
+	ipt, err := iptables.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	ips := ipset.New()
 
 	handleError(resetIPTables(ipt))

@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/coreos/go-iptables/iptables"
 	"k8s.io/client-go/pkg/api/unversioned"
 	coreapi "k8s.io/client-go/pkg/api/v1"
 	extnapi "k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/pkg/types"
 	"k8s.io/client-go/pkg/util/uuid"
-	"k8s.io/kubernetes/pkg/util/iptables"
 
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
 type ns struct {
-	ipt iptables.Interface // interface to iptables
+	ipt *iptables.IPTables // interface to iptables
 	ips ipset.Interface    // interface to ipset
 
 	name      string                              // k8s Namespace name
@@ -31,7 +31,7 @@ type ns struct {
 	rules        *ruleSet
 }
 
-func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors *selectorSet) (*ns, error) {
+func newNS(name string, ipt *iptables.IPTables, ips ipset.Interface, nsSelectors *selectorSet) (*ns, error) {
 	allPods, err := newSelectorSpec(&unversioned.LabelSelector{}, name, ipset.HashIP)
 	if err != nil {
 		return nil, err
@@ -230,12 +230,11 @@ func bypassRule(nsIpsetName ipset.Name) []string {
 }
 
 func (ns *ns) ensureBypassRule(nsIpsetName ipset.Name) error {
-	_, err := ns.ipt.EnsureRule(iptables.Append, iptables.TableFilter, DefaultChain, bypassRule(ns.allPods.ipsetName)...)
-	return err
+	return ns.ipt.Append(TableFilter, DefaultChain, bypassRule(ns.allPods.ipsetName)...)
 }
 
 func (ns *ns) deleteBypassRule(nsIpsetName ipset.Name) error {
-	return ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain, bypassRule(ns.allPods.ipsetName)...)
+	return ns.ipt.Delete(TableFilter, DefaultChain, bypassRule(ns.allPods.ipsetName)...)
 }
 
 func (ns *ns) addNamespace(obj *coreapi.Namespace) error {

@@ -4,10 +4,10 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/pkg/errors"
 	coreapi "k8s.io/client-go/pkg/api/v1"
 	extnapi "k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/kubernetes/pkg/util/iptables"
 
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
@@ -29,14 +29,14 @@ type NetworkPolicyController interface {
 type controller struct {
 	sync.Mutex
 
-	ipt iptables.Interface
+	ipt *iptables.IPTables
 	ips ipset.Interface
 
 	nss         map[string]*ns // ns name -> ns struct
 	nsSelectors *selectorSet   // selector string -> nsSelector
 }
 
-func New(ipt iptables.Interface, ips ipset.Interface) NetworkPolicyController {
+func New(ipt *iptables.IPTables, ips ipset.Interface) NetworkPolicyController {
 	c := &controller{
 		ipt: ipt,
 		ips: ips,
