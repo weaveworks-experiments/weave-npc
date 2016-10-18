@@ -5,25 +5,25 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/apis/extensions"
+	coreapi "k8s.io/client-go/pkg/api/v1"
+	extnapi "k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/kubernetes/pkg/util/iptables"
 
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
 type NetworkPolicyController interface {
-	AddNamespace(ns *api.Namespace) error
-	UpdateNamespace(oldObj, newObj *api.Namespace) error
-	DeleteNamespace(ns *api.Namespace) error
+	AddNamespace(ns *coreapi.Namespace) error
+	UpdateNamespace(oldObj, newObj *coreapi.Namespace) error
+	DeleteNamespace(ns *coreapi.Namespace) error
 
-	AddPod(obj *api.Pod) error
-	UpdatePod(oldObj, newObj *api.Pod) error
-	DeletePod(obj *api.Pod) error
+	AddPod(obj *coreapi.Pod) error
+	UpdatePod(oldObj, newObj *coreapi.Pod) error
+	DeletePod(obj *coreapi.Pod) error
 
-	AddNetworkPolicy(obj *extensions.NetworkPolicy) error
-	UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error
-	DeleteNetworkPolicy(obj *extensions.NetworkPolicy) error
+	AddNetworkPolicy(obj *extnapi.NetworkPolicy) error
+	UpdateNetworkPolicy(oldObj, newObj *extnapi.NetworkPolicy) error
+	DeleteNetworkPolicy(obj *extnapi.NetworkPolicy) error
 }
 
 type controller struct {
@@ -82,7 +82,7 @@ func (npc *controller) withNS(name string, f func(ns *ns) error) error {
 	return nil
 }
 
-func (npc *controller) AddPod(obj *api.Pod) error {
+func (npc *controller) AddPod(obj *coreapi.Pod) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -92,7 +92,7 @@ func (npc *controller) AddPod(obj *api.Pod) error {
 	})
 }
 
-func (npc *controller) UpdatePod(oldObj, newObj *api.Pod) error {
+func (npc *controller) UpdatePod(oldObj, newObj *coreapi.Pod) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -102,7 +102,7 @@ func (npc *controller) UpdatePod(oldObj, newObj *api.Pod) error {
 	})
 }
 
-func (npc *controller) DeletePod(obj *api.Pod) error {
+func (npc *controller) DeletePod(obj *coreapi.Pod) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -112,7 +112,7 @@ func (npc *controller) DeletePod(obj *api.Pod) error {
 	})
 }
 
-func (npc *controller) AddNetworkPolicy(obj *extensions.NetworkPolicy) error {
+func (npc *controller) AddNetworkPolicy(obj *extnapi.NetworkPolicy) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -122,7 +122,7 @@ func (npc *controller) AddNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	})
 }
 
-func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error {
+func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extnapi.NetworkPolicy) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -132,7 +132,7 @@ func (npc *controller) UpdateNetworkPolicy(oldObj, newObj *extensions.NetworkPol
 	})
 }
 
-func (npc *controller) DeleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
+func (npc *controller) DeleteNetworkPolicy(obj *extnapi.NetworkPolicy) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -142,7 +142,7 @@ func (npc *controller) DeleteNetworkPolicy(obj *extensions.NetworkPolicy) error 
 	})
 }
 
-func (npc *controller) AddNamespace(obj *api.Namespace) error {
+func (npc *controller) AddNamespace(obj *coreapi.Namespace) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -152,7 +152,7 @@ func (npc *controller) AddNamespace(obj *api.Namespace) error {
 	})
 }
 
-func (npc *controller) UpdateNamespace(oldObj, newObj *api.Namespace) error {
+func (npc *controller) UpdateNamespace(oldObj, newObj *coreapi.Namespace) error {
 	npc.Lock()
 	defer npc.Unlock()
 
@@ -162,7 +162,7 @@ func (npc *controller) UpdateNamespace(oldObj, newObj *api.Namespace) error {
 	})
 }
 
-func (npc *controller) DeleteNamespace(obj *api.Namespace) error {
+func (npc *controller) DeleteNamespace(obj *coreapi.Namespace) error {
 	npc.Lock()
 	defer npc.Unlock()
 

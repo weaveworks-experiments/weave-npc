@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
-	"k8s.io/kubernetes/pkg/types"
+	"k8s.io/client-go/pkg/types"
 	"k8s.io/kubernetes/pkg/util/iptables"
 )
 

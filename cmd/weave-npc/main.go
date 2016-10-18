@@ -7,17 +7,17 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/apis/extensions"
-	"k8s.io/kubernetes/pkg/client/cache"
-	"k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/controller/framework"
-	"k8s.io/kubernetes/pkg/fields"
-	"k8s.io/kubernetes/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	coreapi "k8s.io/client-go/pkg/api/v1"
+	extnapi "k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/fields"
+	"k8s.io/client-go/pkg/runtime"
+	"k8s.io/client-go/pkg/util/wait"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/util/dbus"
 	"k8s.io/kubernetes/pkg/util/exec"
 	"k8s.io/kubernetes/pkg/util/iptables"
-	"k8s.io/kubernetes/pkg/util/wait"
 
 	weavenpc "github.com/weaveworks/weave-npc/pkg/controller"
 	"github.com/weaveworks/weave-npc/pkg/metrics"
@@ -37,9 +37,9 @@ func handleError(err error) {
 }
 
 func makeController(getter cache.Getter, resource string,
-	objType runtime.Object, handlers framework.ResourceEventHandlerFuncs) *framework.Controller {
+	objType runtime.Object, handlers cache.ResourceEventHandlerFuncs) *cache.Controller {
 	listWatch := cache.NewListWatchFromClient(getter, resource, "", fields.Everything())
-	_, controller := framework.NewInformer(listWatch, objType, 0, handlers)
+	_, controller := cache.NewInformer(listWatch, objType, 0, handlers)
 	return controller
 }
 
@@ -115,7 +115,12 @@ func root(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to start ulogd: %v", err)
 	}
 
-	client, err := unversioned.NewInCluster()
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -128,40 +133,40 @@ func root(cmd *cobra.Command, args []string) {
 
 	npc := weavenpc.New(ipt, ips)
 
-	nsController := makeController(client, "namespaces", &api.Namespace{},
-		framework.ResourceEventHandlerFuncs{
+	nsController := makeController(client.Core().RESTClient(), "namespaces", &coreapi.Namespace{},
+		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				handleError(npc.AddNamespace(obj.(*api.Namespace)))
+				handleError(npc.AddNamespace(obj.(*coreapi.Namespace)))
 			},
 			DeleteFunc: func(obj interface{}) {
-				handleError(npc.DeleteNamespace(obj.(*api.Namespace)))
+				handleError(npc.DeleteNamespace(obj.(*coreapi.Namespace)))
 			},
 			UpdateFunc: func(old, new interface{}) {
-				handleError(npc.UpdateNamespace(old.(*api.Namespace), new.(*api.Namespace)))
+				handleError(npc.UpdateNamespace(old.(*coreapi.Namespace), new.(*coreapi.Namespace)))
 			}})
 
-	podController := makeController(client, "pods", &api.Pod{},
-		framework.ResourceEventHandlerFuncs{
+	podController := makeController(client.Core().RESTClient(), "pods", &coreapi.Pod{},
+		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				handleError(npc.AddPod(obj.(*api.Pod)))
+				handleError(npc.AddPod(obj.(*coreapi.Pod)))
 			},
 			DeleteFunc: func(obj interface{}) {
-				handleError(npc.DeletePod(obj.(*api.Pod)))
+				handleError(npc.DeletePod(obj.(*coreapi.Pod)))
 			},
 			UpdateFunc: func(old, new interface{}) {
-				handleError(npc.UpdatePod(old.(*api.Pod), new.(*api.Pod)))
+				handleError(npc.UpdatePod(old.(*coreapi.Pod), new.(*coreapi.Pod)))
 			}})
 
-	npController := makeController(client.ExtensionsClient, "networkpolicies", &extensions.NetworkPolicy{},
-		framework.ResourceEventHandlerFuncs{
+	npController := makeController(client.Extensions().RESTClient(), "networkpolicies", &extnapi.NetworkPolicy{},
+		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				handleError(npc.AddNetworkPolicy(obj.(*extensions.NetworkPolicy)))
+				handleError(npc.AddNetworkPolicy(obj.(*extnapi.NetworkPolicy)))
 			},
 			DeleteFunc: func(obj interface{}) {
-				handleError(npc.DeleteNetworkPolicy(obj.(*extensions.NetworkPolicy)))
+				handleError(npc.DeleteNetworkPolicy(obj.(*extnapi.NetworkPolicy)))
 			},
 			UpdateFunc: func(old, new interface{}) {
-				handleError(npc.UpdateNetworkPolicy(old.(*extensions.NetworkPolicy), new.(*extensions.NetworkPolicy)))
+				handleError(npc.UpdateNetworkPolicy(old.(*extnapi.NetworkPolicy), new.(*extnapi.NetworkPolicy)))
 			}})
 
 	go nsController.Run(wait.NeverStop)

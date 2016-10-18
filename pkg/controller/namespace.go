@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 
 	log "github.com/Sirupsen/logrus"
-	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/api/unversioned"
-	"k8s.io/kubernetes/pkg/apis/extensions"
-	"k8s.io/kubernetes/pkg/types"
+	"k8s.io/client-go/pkg/api/unversioned"
+	coreapi "k8s.io/client-go/pkg/api/v1"
+	extnapi "k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/types"
+	"k8s.io/client-go/pkg/util/uuid"
 	"k8s.io/kubernetes/pkg/util/iptables"
-	"k8s.io/kubernetes/pkg/util/uuid"
 
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
@@ -18,10 +18,10 @@ type ns struct {
 	ipt iptables.Interface // interface to iptables
 	ips ipset.Interface    // interface to ipset
 
-	name      string                                  // k8s Namespace name
-	namespace *api.Namespace                          // k8s Namespace object
-	pods      map[types.UID]*api.Pod                  // k8s Pod objects by UID
-	policies  map[types.UID]*extensions.NetworkPolicy // k8s NetworkPolicy objects by UID
+	name      string                              // k8s Namespace name
+	namespace *coreapi.Namespace                    // k8s Namespace object
+	pods      map[types.UID]*coreapi.Pod            // k8s Pod objects by UID
+	policies  map[types.UID]*extnapi.NetworkPolicy // k8s NetworkPolicy objects by UID
 
 	uid     types.UID     // surrogate UID to own allPods selector
 	allPods *selectorSpec // hash:ip ipset of all pod IPs in this namespace
@@ -41,8 +41,8 @@ func newNS(name string, ipt iptables.Interface, ips ipset.Interface, nsSelectors
 		ipt:         ipt,
 		ips:         ips,
 		name:        name,
-		pods:        make(map[types.UID]*api.Pod),
-		policies:    make(map[types.UID]*extensions.NetworkPolicy),
+		pods:        make(map[types.UID]*coreapi.Pod),
+		policies:    make(map[types.UID]*extnapi.NetworkPolicy),
 		uid:         uuid.NewUUID(),
 		allPods:     allPods,
 		nsSelectors: nsSelectors,
@@ -81,7 +81,7 @@ func (ns *ns) onNewPodSelector(selector *selector) error {
 	return nil
 }
 
-func (ns *ns) addPod(obj *api.Pod) error {
+func (ns *ns) addPod(obj *coreapi.Pod) error {
 	ns.pods[obj.ObjectMeta.UID] = obj
 
 	if !hasIP(obj) {
@@ -91,7 +91,7 @@ func (ns *ns) addPod(obj *api.Pod) error {
 	return ns.podSelectors.addToMatching(obj.ObjectMeta.Labels, obj.Status.PodIP)
 }
 
-func (ns *ns) updatePod(oldObj, newObj *api.Pod) error {
+func (ns *ns) updatePod(oldObj, newObj *coreapi.Pod) error {
 	delete(ns.pods, oldObj.ObjectMeta.UID)
 	ns.pods[newObj.ObjectMeta.UID] = newObj
 
@@ -132,7 +132,7 @@ func (ns *ns) updatePod(oldObj, newObj *api.Pod) error {
 	return nil
 }
 
-func (ns *ns) deletePod(obj *api.Pod) error {
+func (ns *ns) deletePod(obj *coreapi.Pod) error {
 	delete(ns.pods, obj.ObjectMeta.UID)
 
 	if !hasIP(obj) {
@@ -142,7 +142,7 @@ func (ns *ns) deletePod(obj *api.Pod) error {
 	return ns.podSelectors.delFromMatching(obj.ObjectMeta.Labels, obj.Status.PodIP)
 }
 
-func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
+func (ns *ns) addNetworkPolicy(obj *extnapi.NetworkPolicy) error {
 	ns.policies[obj.ObjectMeta.UID] = obj
 
 	// Analyse policy, determine which rules and ipsets are required
@@ -165,7 +165,7 @@ func (ns *ns) addNetworkPolicy(obj *extensions.NetworkPolicy) error {
 	return nil
 }
 
-func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) error {
+func (ns *ns) updateNetworkPolicy(oldObj, newObj *extnapi.NetworkPolicy) error {
 	delete(ns.policies, oldObj.ObjectMeta.UID)
 	ns.policies[newObj.ObjectMeta.UID] = newObj
 
@@ -202,7 +202,7 @@ func (ns *ns) updateNetworkPolicy(oldObj, newObj *extensions.NetworkPolicy) erro
 	return nil
 }
 
-func (ns *ns) deleteNetworkPolicy(obj *extensions.NetworkPolicy) error {
+func (ns *ns) deleteNetworkPolicy(obj *extnapi.NetworkPolicy) error {
 	delete(ns.policies, obj.ObjectMeta.UID)
 
 	// Analyse network policy to free resources
@@ -238,7 +238,7 @@ func (ns *ns) deleteBypassRule(nsIpsetName ipset.Name) error {
 	return ns.ipt.DeleteRule(iptables.TableFilter, DefaultChain, bypassRule(ns.allPods.ipsetName)...)
 }
 
-func (ns *ns) addNamespace(obj *api.Namespace) error {
+func (ns *ns) addNamespace(obj *coreapi.Namespace) error {
 	ns.namespace = obj
 
 	// Insert a rule to bypass policies if namespace is DefaultAllow
@@ -250,7 +250,7 @@ func (ns *ns) addNamespace(obj *api.Namespace) error {
 	return ns.nsSelectors.addToMatching(obj.ObjectMeta.Labels, string(ns.allPods.ipsetName))
 }
 
-func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
+func (ns *ns) updateNamespace(oldObj, newObj *coreapi.Namespace) error {
 	ns.namespace = newObj
 
 	// Update bypass rule if ingress default has changed
@@ -290,7 +290,7 @@ func (ns *ns) updateNamespace(oldObj, newObj *api.Namespace) error {
 	return nil
 }
 
-func (ns *ns) deleteNamespace(obj *api.Namespace) error {
+func (ns *ns) deleteNamespace(obj *coreapi.Namespace) error {
 	ns.namespace = nil
 
 	// Remove bypass rule
@@ -302,11 +302,9 @@ func (ns *ns) deleteNamespace(obj *api.Namespace) error {
 	return ns.nsSelectors.delFromMatching(obj.ObjectMeta.Labels, string(ns.allPods.ipsetName))
 }
 
-func hasIP(pod *api.Pod) bool {
+func hasIP(pod *coreapi.Pod) bool {
 	// Ensure pod has an IP address and isn't sharing the host network namespace
-	return len(pod.Status.PodIP) > 0 &&
-		!(pod.Spec.SecurityContext != nil &&
-			pod.Spec.SecurityContext.HostNetwork)
+	return len(pod.Status.PodIP) > 0 && !pod.Spec.HostNetwork
 }
 
 func equals(a, b map[string]string) bool {
@@ -321,7 +319,7 @@ func equals(a, b map[string]string) bool {
 	return true
 }
 
-func isDefaultDeny(namespace *api.Namespace) bool {
+func isDefaultDeny(namespace *coreapi.Namespace) bool {
 	nnpJson, found := namespace.ObjectMeta.Annotations["net.beta.kubernetes.io/network-policy"]
 	if !found {
 		return false
