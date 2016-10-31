@@ -3,14 +3,14 @@ package controller
 import (
 	"fmt"
 
-	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/apis/extensions"
-	"k8s.io/kubernetes/pkg/util/intstr"
+	"k8s.io/client-go/pkg/api"
+	extnapi "k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/util/intstr"
 
 	"github.com/weaveworks/weave-npc/pkg/util/ipset"
 )
 
-func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (
+func (ns *ns) analysePolicy(policy *extnapi.NetworkPolicy) (
 	rules map[string]*ruleSpec,
 	nsSelectors, podSelectors map[string]*selectorSpec,
 	err error) {
@@ -89,7 +89,7 @@ func (ns *ns) analysePolicy(policy *extensions.NetworkPolicy) (
 	return rules, nsSelectors, podSelectors, nil
 }
 
-func withNormalisedProtoAndPort(npps []extensions.NetworkPolicyPort, f func(proto, port string)) {
+func withNormalisedProtoAndPort(npps []extnapi.NetworkPolicyPort, f func(proto, port string)) {
 	for _, npp := range npps {
 		// If no proto is specified, default to TCP
 		proto := string(api.ProtocolTCP)
